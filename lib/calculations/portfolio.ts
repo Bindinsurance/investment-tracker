@@ -25,6 +25,8 @@ export function buildPortfolioPositions(inputs: PositionInput[]): PortfolioPosit
 
   for (const [, items] of grouped) {
     const { asset, account, priceCache } = items[0];
+    // Skip positions with missing joins (can happen if data is incomplete)
+    if (!asset || !account) continue;
     const quantity = items.reduce((sum, i) => sum + i.lot.remaining_quantity, 0);
     const costBasisTotal = items.reduce((sum, i) => sum + i.lot.cost_basis_total * (i.lot.remaining_quantity / i.lot.original_quantity), 0);
     const avgCostBasis = quantity > 0 ? costBasisTotal / quantity : 0;

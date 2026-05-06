@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
-import { Plus, Pencil, Trash2, BarChart3, Search } from 'lucide-react';
+import { Plus, Pencil, Trash2, BarChart3, Search, RefreshCw } from 'lucide-react';
 import { createClient } from '@/lib/supabase/client';
 import { assetFormSchema, AssetFormValues } from '@/lib/validators/transaction';
 import { Asset, AssetType } from '@/types';
@@ -31,7 +31,31 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [deleting, setDeleting] = useState<Asset | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
+
+  const handleRefreshPrices = async () => {
+    setRefreshing(true);
+    try {
+      const res = await fetch('/api/prices/update', { method: 'POST' });
+      const data = await res.json();
+      if (res.ok) {
+        if (data.updated > 0) {
+          toast({ title: `Prices updated`, description: `${data.updated} asset${data.updated !== 1 ? 's' : ''} refreshed. Reloading...` });
+          setTimeout(() => window.location.reload(), 1500);
+        } else {
+          const errMsg = data.errors?.[0] ?? 'No prices returned. Yahoo Finance may be temporarily unavailable.';
+          toast({ title: 'No prices updated', description: errMsg, variant: 'destructive' });
+        }
+      } else {
+        toast({ title: 'Error', description: data.error ?? 'Failed to update prices', variant: 'destructive' });
+      }
+    } catch {
+      toast({ title: 'Network error', description: 'Could not reach the server', variant: 'destructive' });
+    } finally {
+      setRefreshing(false);
+    }
+  };
 
   const { register, handleSubmit, reset, setValue, watch, formState: { errors, isSubmitting } } = useForm<AssetFormValues>({
     resolver: zodResolver(assetFormSchema),
@@ -96,6 +120,10 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
           <Input placeholder="Search ticker or name..." className="pl-9" value={search} onChange={(e) => setSearch(e.target.value)} />
         </div>
         <p className="text-sm text-muted-foreground ml-auto">{filtered.length} asset{filtered.length !== 1 ? 's' : ''}</p>
+        <Button variant="outline" size="sm" onClick={handleRefreshPrices} disabled={refreshing}>
+          <RefreshCw className={cn('w-4 h-4 mr-2', refreshing && 'animate-spin')} />
+          {refreshing ? 'Refreshing...' : 'Refresh Prices'}
+        </Button>
         <Dialog open={open} onOpenChange={setOpen}>
           <DialogTrigger asChild>
             <Button size="sm" onClick={openCreate}><Plus className="w-4 h-4 mr-2" /> Add Asset</Button>

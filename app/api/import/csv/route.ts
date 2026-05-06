@@ -78,7 +78,7 @@ export async function POST(req: NextRequest) {
             user_id: user.id,
             ticker: row.ticker,
             asset_type: 'stock', // Default; user can change later
-            price_source: 'alphavantage',
+            price_source: 'manual', // Yahoo Finance (free, no API key needed)
           })
           .select()
           .single();
