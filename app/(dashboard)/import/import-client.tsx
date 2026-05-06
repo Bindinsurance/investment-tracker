@@ -250,10 +250,10 @@ export function ImportClient({ accounts, existingAssets }: Props) {
                 ] as [keyof CsvColumnMapping, string][]).map(([key, label]) => (
                   <div key={key} className="space-y-1">
                     <Label className="text-xs">{label}</Label>
-                    <Select value={mapping[key] ?? ''} onValueChange={(v) => setMapping({ ...mapping, [key]: v })}>
+                    <Select value={mapping[key] ?? '__skip__'} onValueChange={(v) => setMapping({ ...mapping, [key]: v === '__skip__' ? '' : v })}>
                       <SelectTrigger><SelectValue placeholder="— skip —" /></SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">— skip —</SelectItem>
+                        <SelectItem value="__skip__">— skip —</SelectItem>
                         {csvHeaders.map((h) => <SelectItem key={h} value={h}>{h}</SelectItem>)}
                       </SelectContent>
                     </Select>
