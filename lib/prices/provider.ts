@@ -235,19 +235,19 @@ export function getProviderForAsset(
     return new CoinGeckoProvider();
   }
 
+  // 'manual' = Yahoo Finance (free, no API key required)
+  if (source === 'manual' || !source) {
+    return new YahooFinanceProvider();
+  }
+
   if (source === 'twelvedata' && process.env.TWELVE_DATA_API_KEY) {
     return new TwelveDataProvider(process.env.TWELVE_DATA_API_KEY);
   }
 
-  if (process.env.ALPHA_VANTAGE_API_KEY) {
+  if (source === 'alphavantage' && process.env.ALPHA_VANTAGE_API_KEY) {
     return new AlphaVantageProvider(process.env.ALPHA_VANTAGE_API_KEY);
   }
 
-  // Fallback to Twelve Data if available
-  if (process.env.TWELVE_DATA_API_KEY) {
-    return new TwelveDataProvider(process.env.TWELVE_DATA_API_KEY);
-  }
-
-  // Default: Yahoo Finance (no key needed, works for stocks and ETFs)
+  // Fallback: if the requested source has no API key configured, use Yahoo Finance
   return new YahooFinanceProvider();
 }

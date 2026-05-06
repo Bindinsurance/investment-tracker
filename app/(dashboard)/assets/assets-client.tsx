@@ -61,7 +61,7 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
   const onSubmit = async (values: AssetFormValues) => {
     const supabase = createClient();
     // Auto-assign price source if not set
-    const price_source = values.price_source ?? (values.asset_type === 'crypto' ? 'coingecko' : 'alphavantage');
+    const price_source = values.price_source ?? (values.asset_type === 'crypto' ? 'coingecko' : 'manual');
 
     if (editing) {
       const { error } = await supabase.from('assets').update({ ...values, price_source }).eq('id', editing.id);
@@ -114,7 +114,7 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
                   <Select onValueChange={(v) => {
                     setValue('asset_type', v as AssetType);
                     if (v === 'crypto') setValue('price_source', 'coingecko');
-                    else setValue('price_source', 'alphavantage');
+                    else setValue('price_source', 'manual');
                   }} defaultValue={editing?.asset_type ?? 'stock'}>
                     <SelectTrigger><SelectValue /></SelectTrigger>
                     <SelectContent>
@@ -131,13 +131,13 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
               </div>
               <div className="space-y-2">
                 <Label>Price Source</Label>
-                <Select onValueChange={(v) => setValue('price_source', v as any)} defaultValue={editing?.price_source ?? (assetType === 'crypto' ? 'coingecko' : 'alphavantage')}>
+                <Select onValueChange={(v) => setValue('price_source', v as any)} defaultValue={editing?.price_source ?? (assetType === 'crypto' ? 'coingecko' : 'manual')}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
+                    <SelectItem value="manual">Yahoo Finance (Free)</SelectItem>
                     <SelectItem value="alphavantage">Alpha Vantage</SelectItem>
                     <SelectItem value="twelvedata">Twelve Data</SelectItem>
                     <SelectItem value="coingecko">CoinGecko (Crypto)</SelectItem>
-                    <SelectItem value="manual">Manual</SelectItem>
                   </SelectContent>
                 </Select>
               </div>
