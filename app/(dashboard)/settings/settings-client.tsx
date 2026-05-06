@@ -260,7 +260,7 @@ export function SettingsClient({ profile, taxSettings: initialTaxSettings, accou
                     <TableCell className="text-sm text-muted-foreground">{FILING_STATUS_LABELS[t.filing_status]}</TableCell>
                     <TableCell className="text-right font-mono text-sm">${t.zero_percent_limit.toLocaleString()}</TableCell>
                     <TableCell className="text-right font-mono text-sm">${t.fifteen_percent_limit.toLocaleString()}</TableCell>
-                    <TableCell className="text-right font-mono text-sm text-muted-foreground">>${t.fifteen_percent_limit.toLocaleString()}</TableCell>
+                    <TableCell className="text-right font-mono text-sm text-muted-foreground">{`> $${t.fifteen_percent_limit.toLocaleString()}`}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
