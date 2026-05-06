@@ -7,10 +7,10 @@ import { z } from 'zod';
 const importSchema = z.object({
   rows: z.array(z.object({
     transaction_date: z.string(),
-    transaction_type: z.enum(['buy', 'sell']),
+    transaction_type: z.enum(['buy', 'sell', 'dividend']),
     ticker: z.string(),
-    quantity: z.number().positive(),
-    unit_price: z.number().positive(),
+    quantity: z.number().min(0),
+    unit_price: z.number().min(0),
     total_amount: z.number(),
     fee: z.number().min(0).default(0),
     notes: z.string().optional(),
@@ -86,10 +86,11 @@ export async function POST(req: NextRequest) {
         assetId = newAsset.id;
       }
 
+      const isDividend = row.transaction_type === 'dividend';
       const totalAmount = row.total_amount || row.quantity * row.unit_price;
-      const quantity = row.quantity || calculateQuantityFromAmount(totalAmount, row.unit_price, row.fee);
+      const quantity = isDividend ? 0 : (row.quantity || calculateQuantityFromAmount(totalAmount, row.unit_price, row.fee));
 
-      if (quantity <= 0) { skipped++; continue; }
+      if (!isDividend && quantity <= 0) { skipped++; continue; }
 
       // Insert transaction
       const { data: tx, error: txError } = await supabase
@@ -100,8 +101,8 @@ export async function POST(req: NextRequest) {
           asset_id: assetId,
           transaction_type: row.transaction_type,
           transaction_date: row.transaction_date,
-          total_amount: totalAmount,
-          unit_price: row.unit_price,
+          total_amount: isDividend ? totalAmount : (totalAmount || quantity * row.unit_price),
+          unit_price: isDividend ? 0 : row.unit_price,
           quantity,
           fee: row.fee,
           notes: row.notes || null,
@@ -111,6 +112,9 @@ export async function POST(req: NextRequest) {
         .single();
 
       if (txError) { skipped++; continue; }
+
+      // Dividends: no tax lot or FIFO needed
+      if (isDividend) { imported++; continue; }
 
       // For BUY: create tax lot
       if (row.transaction_type === 'buy') {

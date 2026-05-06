@@ -61,6 +61,7 @@ export function TransactionsClient({ initialTransactions, accounts, assets }: Pr
             <SelectItem value="all">All types</SelectItem>
             <SelectItem value="buy">Buy</SelectItem>
             <SelectItem value="sell">Sell</SelectItem>
+            <SelectItem value="dividend">Dividend</SelectItem>
           </SelectContent>
         </Select>
         <Select value={accountFilter} onValueChange={setAccountFilter}>
@@ -108,10 +109,13 @@ export function TransactionsClient({ initialTransactions, accounts, assets }: Pr
                 <TableRow key={tx.id}>
                   <TableCell className="text-sm">{formatDate(tx.transaction_date)}</TableCell>
                   <TableCell>
-                    <Badge variant={tx.transaction_type === 'buy' ? 'default' : 'secondary'}
-                      className={cn('text-xs', tx.transaction_type === 'buy'
-                        ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
-                        : 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                    <Badge variant="secondary"
+                      className={cn('text-xs',
+                        tx.transaction_type === 'buy'
+                          ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                          : tx.transaction_type === 'sell'
+                          ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200'
+                          : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                       )}>
                       {tx.transaction_type.toUpperCase()}
                     </Badge>

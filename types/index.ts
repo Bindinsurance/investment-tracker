@@ -3,7 +3,7 @@
 // ============================================================
 
 export type AssetType = 'stock' | 'etf' | 'crypto';
-export type TransactionType = 'buy' | 'sell';
+export type TransactionType = 'buy' | 'sell' | 'dividend';
 export type TaxTreatment = 'taxable' | 'tax_advantaged';
 export type TermType = 'short_term' | 'long_term';
 export type PriceSource = 'alphavantage' | 'twelvedata' | 'coingecko' | 'manual';
@@ -265,6 +265,14 @@ export interface ParsedTransaction {
   raw: CsvRow;
   isDuplicate?: boolean;
   error?: string;
+}
+
+export interface DividendFormData {
+  transaction_date: string;
+  account_id: string;
+  asset_id: string;
+  total_amount: number;
+  notes?: string;
 }
 
 // ============================================================

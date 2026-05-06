@@ -30,8 +30,9 @@ function parseDate(raw: string): string {
   return raw;
 }
 
-function parseAction(raw: string): 'buy' | 'sell' | null {
+function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | null {
   const lower = raw.toLowerCase();
+  if (lower.includes('dividend') || lower.includes('div reinv') || lower.includes('qualified div')) return 'dividend';
   if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought')) return 'buy';
   if (lower.includes('sell') || lower.includes('sold')) return 'sell';
   return null;
@@ -122,7 +123,12 @@ export function ImportClient({ accounts, existingAssets }: Props) {
         const fee = Math.abs(safeNum(row[mapping.fee ?? '']));
         const totalAmount = amount || quantity * price;
         const actualQty = quantity || (price > 0 ? totalAmount / price : 0);
-        const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker' : actualQty <= 0 ? 'Invalid qty' : price <= 0 ? 'Invalid price' : undefined;
+        const isDividend = action === 'dividend';
+        const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker'
+          : (!isDividend && actualQty <= 0) ? 'Invalid qty'
+          : (!isDividend && price <= 0) ? 'Invalid price'
+          : (isDividend && totalAmount <= 0) ? 'Invalid dividend amount'
+          : undefined;
         return {
           transaction_date: date,
           transaction_type: action ?? 'buy',

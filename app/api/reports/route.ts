@@ -61,6 +61,8 @@ export async function GET(req: NextRequest) {
       .lte('transaction_date', endDate)
       .order('transaction_date', { ascending: false });
 
+    const txList = transactions ?? [];
+
     // Summary
     const summary = {
       total_proceeds: realizedGains.reduce((s: number, g: any) => s + g.proceeds, 0),
@@ -68,9 +70,11 @@ export async function GET(req: NextRequest) {
       total_gain_loss: realizedGains.reduce((s: number, g: any) => s + g.gain_loss, 0),
       short_term_gain_loss: realizedGains.filter((g: any) => g.term === 'short_term').reduce((s: number, g: any) => s + g.gain_loss, 0),
       long_term_gain_loss: realizedGains.filter((g: any) => g.term === 'long_term').reduce((s: number, g: any) => s + g.gain_loss, 0),
-      buy_count: (transactions ?? []).filter((t: any) => t.transaction_type === 'buy').length,
-      sell_count: (transactions ?? []).filter((t: any) => t.transaction_type === 'sell').length,
-      total_invested: (transactions ?? []).filter((t: any) => t.transaction_type === 'buy').reduce((s: number, t: any) => s + t.total_amount, 0),
+      buy_count: txList.filter((t: any) => t.transaction_type === 'buy').length,
+      sell_count: txList.filter((t: any) => t.transaction_type === 'sell').length,
+      dividend_count: txList.filter((t: any) => t.transaction_type === 'dividend').length,
+      total_invested: txList.filter((t: any) => t.transaction_type === 'buy').reduce((s: number, t: any) => s + t.total_amount, 0),
+      total_dividends: txList.filter((t: any) => t.transaction_type === 'dividend').reduce((s: number, t: any) => s + t.total_amount, 0),
     };
 
     return NextResponse.json({
