@@ -238,14 +238,18 @@ CREATE TRIGGER update_import_batches_updated_at BEFORE UPDATE ON import_batches 
 -- ============================================================
 -- TRIGGER: auto-create profile on user signup
 -- ============================================================
-CREATE OR REPLACE FUNCTION handle_new_user()
+CREATE OR REPLACE FUNCTION public.handle_new_user()
 RETURNS TRIGGER AS $$
 BEGIN
-  INSERT INTO profiles (id, email, full_name)
+  INSERT INTO public.profiles (id, email, full_name)
   VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
   RETURN NEW;
 END;
-$$ LANGUAGE plpgsql SECURITY DEFINER;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+-- NOTE: SET search_path = public is required.
+-- Without it, when Supabase Auth fires this trigger (in the 'auth' schema context),
+-- it cannot resolve the unqualified table name 'profiles', causing
+-- "Database error saving new user" on signup.
 
 CREATE TRIGGER on_auth_user_created
   AFTER INSERT ON auth.users

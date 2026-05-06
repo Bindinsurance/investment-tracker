@@ -311,6 +311,33 @@ setAll(cookiesToSet: { name: string; value: string; options: any }[]) { ... }
 
 ---
 
+### Fix 4 — "Database error saving new user" on signup
+
+**Error (runtime — first signup attempt):**
+```
+Sign up failed
+Database error saving new user
+```
+
+**Cause:** The `handle_new_user` trigger function was created without `SET search_path = public`. When Supabase Auth fires the trigger (running in the `auth` schema context), it cannot resolve the unqualified table name `profiles` and the insert fails.
+
+**Fix:** Recreated the function with explicit schema qualifier and `SET search_path`:
+
+```sql
+CREATE OR REPLACE FUNCTION public.handle_new_user()
+RETURNS TRIGGER AS $$
+BEGIN
+  INSERT INTO public.profiles (id, email, full_name)
+  VALUES (NEW.id, NEW.email, NEW.raw_user_meta_data->>'full_name');
+  RETURN NEW;
+END;
+$$ LANGUAGE plpgsql SECURITY DEFINER SET search_path = public;
+```
+
+Applied directly to the Supabase database via Management API on 2026-05-06. The migration file `001_initial_schema.sql` has also been updated to include this fix for future deployments.
+
+---
+
 ### Build history
 
 | Build | Commit | Result | Error fixed |
