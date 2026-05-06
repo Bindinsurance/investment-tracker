@@ -14,7 +14,19 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Alert, AlertDescription } from '@/components/ui/alert';
 import { useToast } from '@/hooks/use-toast';
 
-interface Props { accounts: Account[]; existingAssets: Asset[]; }
+interface ExistingTransaction {
+  transaction_date: string;
+  transaction_type: string;
+  quantity: number;
+  unit_price: number;
+  asset: { ticker: string } | null;
+}
+
+interface Props {
+  accounts: Account[];
+  existingAssets: Asset[];
+  existingTransactions: ExistingTransaction[];
+}
 
 const STEPS = ['Upload', 'Map Columns', 'Preview & Confirm', 'Done'] as const;
 type Step = typeof STEPS[number];
@@ -38,7 +50,7 @@ function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | null {
   return null;
 }
 
-export function ImportClient({ accounts, existingAssets }: Props) {
+export function ImportClient({ accounts, existingAssets, existingTransactions }: Props) {
   const [step, setStep] = useState<Step>('Upload');
   const [accountId, setAccountId] = useState('');
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
@@ -129,6 +141,17 @@ export function ImportClient({ accounts, existingAssets }: Props) {
           : (!isDividend && price <= 0) ? 'Invalid price'
           : (isDividend && totalAmount <= 0) ? 'Invalid dividend amount'
           : undefined;
+
+        // Check for duplicates against existing transactions (tolerance 0.01%)
+        const isDuplicate = !error && existingTransactions.some((t) => {
+          if (t.asset?.ticker !== ticker) return false;
+          if (t.transaction_date !== date) return false;
+          if (t.transaction_type !== (action ?? 'buy')) return false;
+          const qtyMatch = Math.abs(t.quantity - actualQty) < Math.max(0.0001, actualQty * 0.0001);
+          const priceMatch = isDividend || Math.abs(t.unit_price - price) < Math.max(0.01, price * 0.0001);
+          return qtyMatch && priceMatch;
+        });
+
         return {
           transaction_date: date,
           transaction_type: action ?? 'buy',
@@ -139,6 +162,7 @@ export function ImportClient({ accounts, existingAssets }: Props) {
           fee: isFinite(fee) ? fee : 0,
           raw: row,
           error,
+          isDuplicate,
         };
       });
       setParsed(rows);
@@ -162,7 +186,8 @@ export function ImportClient({ accounts, existingAssets }: Props) {
       });
       const data = await res.json();
       if (!res.ok) { toast({ title: 'Import failed', description: data.error, variant: 'destructive' }); return; }
-      toast({ title: 'Import complete!', description: `Imported ${data.imported} transactions.` });
+      const dupMsg = data.duplicates > 0 ? ` ${data.duplicates} duplicate${data.duplicates !== 1 ? 's' : ''} skipped.` : '';
+      toast({ title: 'Import complete!', description: `Imported ${data.imported} transactions.${dupMsg}` });
       setStep('Done');
     } catch {
       toast({ title: 'Network error', variant: 'destructive' });
@@ -174,6 +199,7 @@ export function ImportClient({ accounts, existingAssets }: Props) {
   const reset = () => { setStep('Upload'); setCsvHeaders([]); setCsvRows([]); setFileName(''); setMapping({}); setParsed([]); setAccountId(''); };
   const validCount = parsed.filter((r) => !r.error && !r.isDuplicate).length;
   const errorCount = parsed.filter((r) => !!r.error).length;
+  const duplicateCount = parsed.filter((r) => !r.error && !!r.isDuplicate).length;
 
   return (
     <div className="p-6 max-w-4xl space-y-6">
@@ -288,13 +314,14 @@ export function ImportClient({ accounts, existingAssets }: Props) {
       {step === 'Preview & Confirm' && (
         <div className="space-y-4">
           <div className="flex gap-3 flex-wrap">
-            <Badge variant="default">{validCount} valid</Badge>
-            {errorCount > 0 && <Badge variant="destructive">{errorCount} errors</Badge>}
+            <Badge variant="default">{validCount} to import</Badge>
+            {duplicateCount > 0 && <Badge variant="outline" className="text-amber-600 border-amber-400">{duplicateCount} duplicate{duplicateCount !== 1 ? 's' : ''} (will skip)</Badge>}
+            {errorCount > 0 && <Badge variant="destructive">{errorCount} invalid (will skip)</Badge>}
           </div>
           {errorCount > 0 && (
             <Alert>
               <AlertCircle className="w-4 h-4" />
-              <AlertDescription>Rows with errors will be skipped. Review below.</AlertDescription>
+              <AlertDescription>Rows with errors or duplicates will be skipped automatically.</AlertDescription>
             </Alert>
           )}
           <div className="overflow-x-auto rounded border max-h-96">

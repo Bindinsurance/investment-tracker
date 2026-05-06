@@ -58,6 +58,15 @@ export async function POST(req: NextRequest) {
 
     let imported = 0;
     let skipped = 0;
+    let duplicates = 0;
+
+    // Load existing transactions for this account to detect duplicates
+    const { data: existingTxs } = await supabase
+      .from('transactions')
+      .select('transaction_date, transaction_type, quantity, unit_price, asset_id')
+      .eq('user_id', user.id)
+      .eq('account_id', account_id);
+    const existingTxList = existingTxs ?? [];
 
     for (const row of rows) {
       // Find or create asset
@@ -91,6 +100,17 @@ export async function POST(req: NextRequest) {
       const quantity = isDividend ? 0 : (row.quantity || calculateQuantityFromAmount(totalAmount, row.unit_price, row.fee));
 
       if (!isDividend && quantity <= 0) { skipped++; continue; }
+
+      // Server-side duplicate check (safety net in case client didn't filter)
+      const isDuplicate = existingTxList.some((t) => {
+        if (t.asset_id !== assetId) return false;
+        if (t.transaction_date !== row.transaction_date) return false;
+        if (t.transaction_type !== row.transaction_type) return false;
+        const qtyMatch = Math.abs(t.quantity - quantity) < Math.max(0.0001, quantity * 0.0001);
+        const priceMatch = isDividend || Math.abs(t.unit_price - row.unit_price) < Math.max(0.01, row.unit_price * 0.0001);
+        return qtyMatch && priceMatch;
+      });
+      if (isDuplicate) { duplicates++; continue; }
 
       // Insert transaction
       const { data: tx, error: txError } = await supabase
@@ -166,7 +186,7 @@ export async function POST(req: NextRequest) {
       .update({ status: 'completed', rows_imported: imported, rows_skipped: skipped })
       .eq('id', batch.id);
 
-    return NextResponse.json({ imported, skipped, batch_id: batch.id });
+    return NextResponse.json({ imported, skipped, duplicates, batch_id: batch.id });
   } catch {
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 });
   }
