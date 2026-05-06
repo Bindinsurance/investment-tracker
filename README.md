@@ -142,13 +142,22 @@ Row Level Security is enabled on all tables — every row is scoped to the authe
 
 ## Deploying to Vercel
 
+### Production URLs (already configured)
+
+| Service | URL |
+|---|---|
+| **App (Vercel)** | https://investment-tracker-murex-rho.vercel.app |
+| **GitHub repo** | https://github.com/Bindinsurance/investment-tracker |
+| **Supabase project** | https://supabase.com/dashboard/project/zsjqupeygncbchkgxmup |
+| **Supabase API** | https://zsjqupeygncbchkgxmup.supabase.co |
+
 ### 1. Push to GitHub
 
 ```bash
 git init
 git add .
 git commit -m "Initial commit"
-git remote add origin https://github.com/your-username/investment-tracker.git
+git remote add origin https://github.com/Bindinsurance/investment-tracker.git
 git push -u origin main
 ```
 
@@ -172,12 +181,20 @@ TWELVE_DATA_API_KEY        (optional)
 
 ### 4. Configure Supabase redirect URL
 
-After deploy, Vercel will give you a production URL like `https://your-app.vercel.app`. Add it to Supabase:
+After deploy, Vercel will give you a production URL like `https://your-app.vercel.app`. Add it to Supabase via the Management API or the Supabase dashboard:
+
+**Authentication > URL Configuration > Site URL:**
+```
+https://investment-tracker-murex-rho.vercel.app
+```
 
 **Authentication > URL Configuration > Redirect URLs:**
 ```
-https://your-app.vercel.app/**
+https://investment-tracker-murex-rho.vercel.app/**
+http://localhost:3000/**
 ```
+
+> **Already configured** — these URLs were set via the Supabase Management API (`PATCH /v1/projects/zsjqupeygncbchkgxmup/config/auth`) on 2026-05-06.
 
 ### 5. Deploy
 
@@ -227,6 +244,82 @@ The CSV import supports any column order. During import you will map your CSV co
 | Fee | No | Defaults to 0 |
 
 Duplicate detection is based on matching date + ticker + quantity + type within 1 cent.
+
+---
+
+## Known Issues & Fixes Applied
+
+This section documents every TypeScript / build error that occurred during the initial Vercel deployment and how each was resolved. Useful for future developers or re-deploys.
+
+### Fix 1 — Map iteration requires ES2015+ target (`tsconfig.json`)
+
+**Error (Vercel Build #4):**
+```
+lib/calculations/portfolio.ts:26:25 — Type 'Map<string, PositionInput[]>' can only be iterated
+through when using '--downlevelIteration' flag or with a '--target' of 'es2015' or higher.
+```
+
+**Cause:** `tsconfig.json` had no explicit `target`, defaulting to ES3/ES5, which does not support `for...of` on `Map`.
+
+**Fix:** Added `"target": "ES2017"` to `tsconfig.json` `compilerOptions`.
+
+```json
+{
+  "compilerOptions": {
+    "target": "ES2017"
+  }
+}
+```
+
+---
+
+### Fix 2 — Implicit `any` in Supabase server client (`lib/supabase/server.ts`)
+
+**Error (Vercel Build #5):**
+```
+lib/supabase/server.ts:15:16 — Parameter 'cookiesToSet' implicitly has an 'any' type.
+```
+
+**Cause:** `@supabase/ssr` v0.5.1 uses `strict: true` TypeScript; the `setAll` cookie method had no type annotation.
+
+**Fix:** Added explicit type using `Parameters<>` utility to derive the options type directly from Next.js's `cookieStore.set`:
+
+```typescript
+setAll(cookiesToSet: {
+  name: string;
+  value: string;
+  options: Parameters<typeof cookieStore.set>[2];
+}[]) { ... }
+```
+
+---
+
+### Fix 3 — Implicit `any` in middleware (`middleware.ts`)
+
+**Error (Vercel Build #6):**
+```
+middleware.ts:15:16 — Parameter 'cookiesToSet' implicitly has an 'any' type.
+```
+
+**Cause:** Same issue as Fix 2 but in the middleware context, where cookies are set on both `request.cookies` and `supabaseResponse.cookies` (which have incompatible types).
+
+**Fix:** Used `options: any` (acceptable here because the value is passed to two different cookie APIs):
+
+```typescript
+setAll(cookiesToSet: { name: string; value: string; options: any }[]) { ... }
+```
+
+---
+
+### Build history
+
+| Build | Commit | Result | Error fixed |
+|---|---|---|---|
+| #1–#3 | initial setup | ❌ Failed | Setup issues |
+| #4 | `d4df693` | ❌ Failed | Map iteration (Fix 1) |
+| #5 | `01453c7` | ❌ Failed | Implicit any server.ts (Fix 2) |
+| #6 | `f6ca4a8` | ❌ Failed | Implicit any middleware.ts (Fix 3) |
+| #7 | `f6ca4a8` | ✅ **SUCCESS** | All errors resolved |
 
 ---
 

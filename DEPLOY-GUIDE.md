@@ -3,16 +3,26 @@
 Projeto: `investment-tracker`
 GitHub: https://github.com/Bindinsurance/investment-tracker
 Supabase: https://zsjqupeygncbchkgxmup.supabase.co
+**App em produção: https://investment-tracker-murex-rho.vercel.app** ✅
+
+---
+
+## 🎉 STATUS: DEPLOY CONCLUÍDO (2026-05-06)
+
+Todos os passos abaixo foram concluídos. O app está no ar e funcionando.
 
 ---
 
 ## ✅ O que já está pronto
 
 - Todo o código Next.js (dashboard, transações, relatórios, import CSV, etc.)
-- Schema do banco de dados (migrations SQL)
-- Configuração do Supabase (.env.local)
+- Schema do banco de dados (migrations SQL executadas no Supabase)
+- Configuração do Supabase (.env.local + variáveis de ambiente no Vercel)
 - vercel.json (cron job de preços)
 - Página de login com sign in + sign up
+- **GitHub:** repositório criado e código enviado (`main` branch)
+- **Vercel:** deploy ativo, build #7 com sucesso (commit `f6ca4a8`)
+- **Supabase Auth:** Site URL e Redirect URLs configurados para produção
 
 ---
 
@@ -97,14 +107,47 @@ https://seu-app.vercel.app/**
 
 ---
 
-### PASSO 6 — Atualizar URL no Supabase
+### PASSO 6 — Atualizar URL no Supabase ✅ CONCLUÍDO
 
-Após o deploy, o Vercel dará uma URL como `https://investment-tracker-xyz.vercel.app`.
+URL de produção do Vercel: `https://investment-tracker-murex-rho.vercel.app`
 
-Volte no Supabase → **Authentication > URL Configuration** e adicione:
+Configurado via Supabase Management API (`PATCH /v1/projects/zsjqupeygncbchkgxmup/config/auth`):
+- **Site URL:** `https://investment-tracker-murex-rho.vercel.app`
+- **Redirect URLs:** `https://investment-tracker-murex-rho.vercel.app/**` e `http://localhost:3000/**`
+
+Para reconfigurar manualmente: Supabase Dashboard → Authentication → URL Configuration.
+
+---
+
+## 🔧 Erros de Build Corrigidos (TypeScript Strict Mode)
+
+O Vercel usa `strict: true` no TypeScript. Foram necessárias 3 correções antes do build passar:
+
+### Erro 1 — `tsconfig.json` sem target (Build #4)
 ```
-https://investment-tracker-xyz.vercel.app/**
+lib/calculations/portfolio.ts:26 — Map can only be iterated with '--target' of 'es2015' or higher
 ```
+**Correção:** Adicionado `"target": "ES2017"` no `compilerOptions` do `tsconfig.json`.
+
+### Erro 2 — Tipo implícito em `lib/supabase/server.ts` (Build #5)
+```
+lib/supabase/server.ts:15 — Parameter 'cookiesToSet' implicitly has an 'any' type
+```
+**Correção:** Adicionada anotação de tipo explícita usando `Parameters<typeof cookieStore.set>[2]`:
+```typescript
+setAll(cookiesToSet: { name: string; value: string; options: Parameters<typeof cookieStore.set>[2] }[])
+```
+
+### Erro 3 — Tipo implícito em `middleware.ts` (Build #6)
+```
+middleware.ts:15 — Parameter 'cookiesToSet' implicitly has an 'any' type
+```
+**Correção:** Adicionada anotação com `options: any` (necessário porque o `options` é passado para dois tipos de cookies com assinaturas diferentes):
+```typescript
+setAll(cookiesToSet: { name: string; value: string; options: any }[])
+```
+
+Build #7 (commit `f6ca4a8`) passou com sucesso — **1 min 45 seg de build time**.
 
 ---
 
