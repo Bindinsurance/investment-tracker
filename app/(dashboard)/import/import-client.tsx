@@ -115,10 +115,11 @@ export function ImportClient({ accounts, existingAssets }: Props) {
         const date = parseDate(safeStr(row[mapping.date ?? '']));
         const action = parseAction(safeStr(row[mapping.action ?? '']));
         const ticker = safeStr(row[mapping.symbol ?? '']).toUpperCase();
-        const quantity = safeNum(row[mapping.quantity ?? '']);
-        const price = safeNum(row[mapping.price ?? '']);
-        const amount = safeNum(row[mapping.amount ?? '']);
-        const fee = safeNum(row[mapping.fee ?? '']);
+        // Fidelity exports negative quantities for sells and negative amounts for buys — normalize with Math.abs
+        const quantity = Math.abs(safeNum(row[mapping.quantity ?? '']));
+        const price = Math.abs(safeNum(row[mapping.price ?? '']));
+        const amount = Math.abs(safeNum(row[mapping.amount ?? '']));
+        const fee = Math.abs(safeNum(row[mapping.fee ?? '']));
         const totalAmount = amount || quantity * price;
         const actualQty = quantity || (price > 0 ? totalAmount / price : 0);
         const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker' : actualQty <= 0 ? 'Invalid qty' : price <= 0 ? 'Invalid price' : undefined;
