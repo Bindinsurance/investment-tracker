@@ -110,8 +110,8 @@ export function ReportsClient({ accounts, brokers, taxSettings }: Props) {
   const exportPDF = async () => {
     if (!reportData) return;
     try {
-      const { jsPDF } = await import('jspdf');
-      const autoTable = (await import('jspdf-autotable')).default;
+      const { default: jsPDF } = await import('jspdf');
+      const { default: autoTable } = await import('jspdf-autotable');
       const doc = new jsPDF({ orientation: 'landscape' });
       doc.setFontSize(16);
       doc.text('Investment Report', 14, 20);
