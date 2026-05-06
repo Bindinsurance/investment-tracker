@@ -12,44 +12,78 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/use-toast';
 
-const schema = z.object({
+const signInSchema = z.object({
   email: z.string().email('Invalid email address'),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
-type FormValues = z.infer<typeof schema>;
+const signUpSchema = z.object({
+  full_name: z.string().min(2, 'Name must be at least 2 characters'),
+  email: z.string().email('Invalid email address'),
+  password: z.string().min(8, 'Password must be at least 8 characters'),
+  confirm_password: z.string(),
+}).refine((data) => data.password === data.confirm_password, {
+  message: "Passwords don't match",
+  path: ['confirm_password'],
+});
+
+type SignInValues = z.infer<typeof signInSchema>;
+type SignUpValues = z.infer<typeof signUpSchema>;
 
 export default function LoginPage() {
   const router = useRouter();
   const { toast } = useToast();
-  const [loading, setLoading] = useState(false);
+  const [loadingSignIn, setLoadingSignIn] = useState(false);
+  const [loadingSignUp, setLoadingSignUp] = useState(false);
 
-  const {
-    register,
-    handleSubmit,
-    formState: { errors },
-  } = useForm<FormValues>({ resolver: zodResolver(schema) });
+  const signInForm = useForm<SignInValues>({ resolver: zodResolver(signInSchema) });
+  const signUpForm = useForm<SignUpValues>({ resolver: zodResolver(signUpSchema) });
 
-  const onSubmit = async (values: FormValues) => {
-    setLoading(true);
+  const onSignIn = async (values: SignInValues) => {
+    setLoadingSignIn(true);
     try {
       const supabase = createClient();
       const { error } = await supabase.auth.signInWithPassword({
         email: values.email,
         password: values.password,
       });
-
       if (error) {
         toast({ title: 'Login failed', description: error.message, variant: 'destructive' });
         return;
       }
-
       router.push('/dashboard');
       router.refresh();
     } finally {
-      setLoading(false);
+      setLoadingSignIn(false);
+    }
+  };
+
+  const onSignUp = async (values: SignUpValues) => {
+    setLoadingSignUp(true);
+    try {
+      const supabase = createClient();
+      const { error } = await supabase.auth.signUp({
+        email: values.email,
+        password: values.password,
+        options: {
+          data: { full_name: values.full_name },
+          emailRedirectTo: `${window.location.origin}/auth/callback`,
+        },
+      });
+      if (error) {
+        toast({ title: 'Sign up failed', description: error.message, variant: 'destructive' });
+        return;
+      }
+      toast({
+        title: 'Account created!',
+        description: 'Check your email to confirm your account, then sign in.',
+      });
+      signUpForm.reset();
+    } finally {
+      setLoadingSignUp(false);
     }
   };
 
@@ -65,55 +99,129 @@ export default function LoginPage() {
           <p className="text-muted-foreground text-sm">Personal portfolio management</p>
         </div>
 
-        <Card>
-          <CardHeader>
-            <CardTitle>Sign in</CardTitle>
-            <CardDescription>Enter your credentials to access your portfolio</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="you@example.com"
-                  autoComplete="email"
-                  {...register('email')}
-                />
-                {errors.email && (
-                  <p className="text-sm text-destructive">{errors.email.message}</p>
-                )}
-              </div>
+        <Tabs defaultValue="signin">
+          <TabsList className="grid grid-cols-2 w-full">
+            <TabsTrigger value="signin">Sign in</TabsTrigger>
+            <TabsTrigger value="signup">Create account</TabsTrigger>
+          </TabsList>
 
-              <div className="space-y-2">
-                <div className="flex items-center justify-between">
-                  <Label htmlFor="password">Password</Label>
-                  <Link
-                    href="/forgot-password"
-                    className="text-sm text-primary hover:underline"
-                  >
-                    Forgot password?
-                  </Link>
-                </div>
-                <Input
-                  id="password"
-                  type="password"
-                  placeholder="••••••••"
-                  autoComplete="current-password"
-                  {...register('password')}
-                />
-                {errors.password && (
-                  <p className="text-sm text-destructive">{errors.password.message}</p>
-                )}
-              </div>
+          {/* SIGN IN */}
+          <TabsContent value="signin">
+            <Card>
+              <CardHeader>
+                <CardTitle>Welcome back</CardTitle>
+                <CardDescription>Enter your credentials to access your portfolio</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={signInForm.handleSubmit(onSignIn)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signin-email">Email</Label>
+                    <Input
+                      id="signin-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      {...signInForm.register('email')}
+                    />
+                    {signInForm.formState.errors.email && (
+                      <p className="text-sm text-destructive">{signInForm.formState.errors.email.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <div className="flex items-center justify-between">
+                      <Label htmlFor="signin-password">Password</Label>
+                      <Link href="/forgot-password" className="text-sm text-primary hover:underline">
+                        Forgot password?
+                      </Link>
+                    </div>
+                    <Input
+                      id="signin-password"
+                      type="password"
+                      placeholder="••••••••"
+                      autoComplete="current-password"
+                      {...signInForm.register('password')}
+                    />
+                    {signInForm.formState.errors.password && (
+                      <p className="text-sm text-destructive">{signInForm.formState.errors.password.message}</p>
+                    )}
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loadingSignIn}>
+                    {loadingSignIn ? 'Signing in...' : 'Sign in'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
 
-              <Button type="submit" className="w-full" disabled={loading}>
-                {loading ? 'Signing in...' : 'Sign in'}
-              </Button>
-            </form>
-          </CardContent>
-        </Card>
+          {/* SIGN UP */}
+          <TabsContent value="signup">
+            <Card>
+              <CardHeader>
+                <CardTitle>Create your account</CardTitle>
+                <CardDescription>Start tracking your investments for free</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <form onSubmit={signUpForm.handleSubmit(onSignUp)} className="space-y-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-name">Full name</Label>
+                    <Input
+                      id="signup-name"
+                      type="text"
+                      placeholder="Your name"
+                      autoComplete="name"
+                      {...signUpForm.register('full_name')}
+                    />
+                    {signUpForm.formState.errors.full_name && (
+                      <p className="text-sm text-destructive">{signUpForm.formState.errors.full_name.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-email">Email</Label>
+                    <Input
+                      id="signup-email"
+                      type="email"
+                      placeholder="you@example.com"
+                      autoComplete="email"
+                      {...signUpForm.register('email')}
+                    />
+                    {signUpForm.formState.errors.email && (
+                      <p className="text-sm text-destructive">{signUpForm.formState.errors.email.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-password">Password</Label>
+                    <Input
+                      id="signup-password"
+                      type="password"
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      {...signUpForm.register('password')}
+                    />
+                    {signUpForm.formState.errors.password && (
+                      <p className="text-sm text-destructive">{signUpForm.formState.errors.password.message}</p>
+                    )}
+                  </div>
+                  <div className="space-y-2">
+                    <Label htmlFor="signup-confirm">Confirm password</Label>
+                    <Input
+                      id="signup-confirm"
+                      type="password"
+                      placeholder="••••••••"
+                      autoComplete="new-password"
+                      {...signUpForm.register('confirm_password')}
+                    />
+                    {signUpForm.formState.errors.confirm_password && (
+                      <p className="text-sm text-destructive">{signUpForm.formState.errors.confirm_password.message}</p>
+                    )}
+                  </div>
+                  <Button type="submit" className="w-full" disabled={loadingSignUp}>
+                    {loadingSignUp ? 'Creating account...' : 'Create account'}
+                  </Button>
+                </form>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );
