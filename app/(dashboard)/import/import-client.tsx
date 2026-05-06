@@ -52,29 +52,53 @@ export function ImportClient({ accounts, existingAssets }: Props) {
     if (!file.name.endsWith('.csv')) { toast({ title: 'Invalid file', description: 'Please upload a .csv file', variant: 'destructive' }); return; }
     if (file.size > 5 * 1024 * 1024) { toast({ title: 'File too large', description: 'Max 5MB', variant: 'destructive' }); return; }
     setFileName(file.name);
-    Papa.parse(file, {
-      header: true,
-      skipEmptyLines: true,
-      complete: (result) => {
-        const headers = result.meta.fields ?? [];
-        setCsvHeaders(headers);
-        setCsvRows(result.data as Record<string, string>[]);
-        // Auto-map common column names
-        const autoMap: Partial<CsvColumnMapping> = {};
-        const lower = headers.map((h) => h.toLowerCase());
-        const find = (terms: string[]) => headers[lower.findIndex((h) => terms.some((t) => h.includes(t)))] ?? '';
-        autoMap.date = find(['date', 'trade date']);
-        autoMap.action = find(['action', 'type', 'transaction']);
-        autoMap.symbol = find(['symbol', 'ticker', 'asset']);
-        autoMap.quantity = find(['qty', 'quantity', 'shares', 'units']);
-        autoMap.price = find(['price', 'unit price']);
-        autoMap.amount = find(['amount', 'total', 'value']);
-        autoMap.fee = find(['fee', 'commission', 'cost']);
-        setMapping(autoMap);
-        setStep('Map Columns');
-      },
-      error: () => toast({ title: 'Parse error', variant: 'destructive' }),
-    });
+    try {
+      Papa.parse(file, {
+        header: true,
+        skipEmptyLines: 'greedy',
+        complete: (result) => {
+          try {
+            const headers = (result.meta.fields ?? []).filter(h => h && h.trim() !== '');
+            if (headers.length === 0) {
+              toast({ title: 'Empty or invalid CSV', description: 'No column headers found in the file.', variant: 'destructive' });
+              return;
+            }
+            const rows = (result.data as Record<string, string>[]).filter(row => {
+              const vals = Object.values(row);
+              return vals.some(v => v && v.toString().trim() !== '');
+            });
+            setCsvHeaders(headers);
+            setCsvRows(rows);
+            // Auto-map common column names
+            const autoMap: Partial<CsvColumnMapping> = {};
+            const lower = headers.map((h) => h.toLowerCase());
+            const find = (terms: string[]) => {
+              const idx = lower.findIndex((h) => terms.some((t) => h.includes(t)));
+              return idx >= 0 ? headers[idx] : '';
+            };
+            autoMap.date = find(['date', 'trade date', 'settlement']);
+            autoMap.action = find(['action', 'type', 'transaction', 'description']);
+            autoMap.symbol = find(['symbol', 'ticker', 'asset', 'cusip']);
+            autoMap.quantity = find(['qty', 'quantity', 'shares', 'units']);
+            autoMap.price = find(['price', 'unit price']);
+            autoMap.amount = find(['amount', 'total', 'value', 'net amount']);
+            autoMap.fee = find(['fee', 'commission', 'cost']);
+            setMapping(autoMap);
+            setStep('Map Columns');
+          } catch (err) {
+            console.error('CSV processing error:', err);
+            toast({ title: 'Error reading file', description: 'Could not process the CSV. Make sure it is a transaction history export, not a statement or portfolio summary.', variant: 'destructive' });
+          }
+        },
+        error: (err) => {
+          console.error('PapaParse error:', err);
+          toast({ title: 'Parse error', description: 'Could not parse the CSV file.', variant: 'destructive' });
+        },
+      });
+    } catch (err) {
+      console.error('File read error:', err);
+      toast({ title: 'File error', description: 'Could not read the file.', variant: 'destructive' });
+    }
   }, [toast]);
 
   const handleDrop = (e: React.DragEvent) => {
@@ -84,31 +108,38 @@ export function ImportClient({ accounts, existingAssets }: Props) {
   };
 
   const buildPreview = () => {
-    const rows: ParsedTransaction[] = csvRows.slice(0, 500).map((row) => {
-      const date = parseDate(row[mapping.date ?? ''] ?? '');
-      const action = parseAction(row[mapping.action ?? ''] ?? '');
-      const ticker = (row[mapping.symbol ?? ''] ?? '').toUpperCase().trim();
-      const quantity = parseFloat(row[mapping.quantity ?? ''] ?? '0') || 0;
-      const price = parseFloat((row[mapping.price ?? ''] ?? '0').replace(/[$,]/g, '')) || 0;
-      const amount = parseFloat((row[mapping.amount ?? ''] ?? '0').replace(/[$,]/g, '')) || 0;
-      const fee = parseFloat((row[mapping.fee ?? ''] ?? '0').replace(/[$,]/g, '')) || 0;
-      const totalAmount = amount || quantity * price;
-      const actualQty = quantity || (price > 0 ? totalAmount / price : 0);
-      const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker' : actualQty <= 0 ? 'Invalid qty' : price <= 0 ? 'Invalid price' : undefined;
-      return {
-        transaction_date: date,
-        transaction_type: action ?? 'buy',
-        ticker,
-        quantity: actualQty,
-        unit_price: price,
-        total_amount: totalAmount,
-        fee,
-        raw: row,
-        error,
-      };
-    });
-    setParsed(rows);
-    setStep('Preview & Confirm');
+    try {
+      const rows: ParsedTransaction[] = csvRows.slice(0, 500).map((row) => {
+        const safeStr = (val: unknown) => String(val ?? '').trim();
+        const safeNum = (val: unknown) => parseFloat(safeStr(val).replace(/[$,\s]/g, '')) || 0;
+        const date = parseDate(safeStr(row[mapping.date ?? '']));
+        const action = parseAction(safeStr(row[mapping.action ?? '']));
+        const ticker = safeStr(row[mapping.symbol ?? '']).toUpperCase();
+        const quantity = safeNum(row[mapping.quantity ?? '']);
+        const price = safeNum(row[mapping.price ?? '']);
+        const amount = safeNum(row[mapping.amount ?? '']);
+        const fee = safeNum(row[mapping.fee ?? '']);
+        const totalAmount = amount || quantity * price;
+        const actualQty = quantity || (price > 0 ? totalAmount / price : 0);
+        const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker' : actualQty <= 0 ? 'Invalid qty' : price <= 0 ? 'Invalid price' : undefined;
+        return {
+          transaction_date: date,
+          transaction_type: action ?? 'buy',
+          ticker,
+          quantity: isFinite(actualQty) ? actualQty : 0,
+          unit_price: isFinite(price) ? price : 0,
+          total_amount: isFinite(totalAmount) ? totalAmount : 0,
+          fee: isFinite(fee) ? fee : 0,
+          raw: row,
+          error,
+        };
+      });
+      setParsed(rows);
+      setStep('Preview & Confirm');
+    } catch (err) {
+      console.error('Preview build error:', err);
+      toast({ title: 'Error building preview', description: 'Could not process the CSV rows. Please check the column mapping.', variant: 'destructive' });
+    }
   };
 
   const handleImport = async () => {
@@ -157,6 +188,20 @@ export function ImportClient({ accounts, existingAssets }: Props) {
       {/* Step 1: Upload */}
       {step === 'Upload' && (
         <div className="space-y-4">
+          <Alert>
+            <AlertCircle className="w-4 h-4" />
+            <AlertDescription>
+              <strong>Required: Transaction History CSV</strong> — not a statement or portfolio summary.
+              <br />
+              The CSV must have columns for: <strong>Date, Action (Buy/Sell), Symbol, Quantity, Price</strong>.
+              <br />
+              <span className="text-xs text-muted-foreground mt-1 block">
+                In Fidelity: Accounts → History → select date range → Download (CSV). &nbsp;
+                In Schwab: Accounts → History → Export. &nbsp;
+                In Robinhood: Account → Statements → CSV.
+              </span>
+            </AlertDescription>
+          </Alert>
           <div className="space-y-2">
             <Label>Account *</Label>
             <Select value={accountId} onValueChange={setAccountId}>
@@ -174,7 +219,7 @@ export function ImportClient({ accounts, existingAssets }: Props) {
           >
             <Upload className="w-10 h-10 text-muted-foreground mx-auto mb-3" />
             <p className="font-medium mb-1">Drop CSV here or click to browse</p>
-            <p className="text-sm text-muted-foreground">Max 5MB — broker CSV format</p>
+            <p className="text-sm text-muted-foreground">Max 5MB — transaction history format</p>
             <input id="csv-input" type="file" accept=".csv" className="hidden" onChange={(e) => { const f = e.target.files?.[0]; if (f) handleFile(f); }} />
           </div>
         </div>

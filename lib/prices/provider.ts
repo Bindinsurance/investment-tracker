@@ -185,6 +185,46 @@ export class CoinGeckoProvider implements PriceProvider {
 }
 
 // ============================================================
+// Yahoo Finance Provider (no API key required)
+// ============================================================
+export class YahooFinanceProvider implements PriceProvider {
+  name: PriceSource = 'manual'; // closest available type
+
+  async fetchPrice(ticker: string): Promise<PriceData | null> {
+    try {
+      const url = `https://query1.finance.yahoo.com/v8/finance/chart/${encodeURIComponent(ticker)}?interval=1d&range=1d`;
+      const res = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        next: { revalidate: 300 },
+      });
+      const data = await res.json();
+      const meta = data?.chart?.result?.[0]?.meta;
+      if (!meta?.regularMarketPrice) return null;
+      return {
+        ticker: ticker.toUpperCase(),
+        price: meta.regularMarketPrice,
+        previous_close: meta.previousClose ?? meta.chartPreviousClose ?? undefined,
+        source: 'manual',
+        timestamp: new Date().toISOString(),
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  async fetchPrices(tickers: string[]): Promise<PriceData[]> {
+    const results: PriceData[] = [];
+    for (const ticker of tickers) {
+      const price = await this.fetchPrice(ticker);
+      if (price) results.push(price);
+      // Small delay to avoid rate limiting
+      await new Promise((r) => setTimeout(r, 300));
+    }
+    return results;
+  }
+}
+
+// ============================================================
 // Provider Factory
 // ============================================================
 export function getProviderForAsset(
@@ -208,6 +248,6 @@ export function getProviderForAsset(
     return new TwelveDataProvider(process.env.TWELVE_DATA_API_KEY);
   }
 
-  // Default: CoinGecko (no key needed)
-  return new CoinGeckoProvider();
+  // Default: Yahoo Finance (no key needed, works for stocks and ETFs)
+  return new YahooFinanceProvider();
 }
