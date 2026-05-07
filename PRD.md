@@ -63,11 +63,13 @@ Investidor pessoa física que:
 
 ### 4.6 Ativos (Assets)
 - Cadastro de ativos com ticker, nome, tipo (STOCK, ETF, CRYPTO) e fonte de preço
-- Preços atualizados via Alpha Vantage (ações/ETFs) e CoinGecko (crypto)
+- Preços atualizados via **Yahoo Finance** (ações/ETFs, gratuito, sem chave de API)
+- Botão "Refresh Prices" na página de ativos para atualização manual imediata
 
 ### 4.7 Transações
 - Registro de compra (Buy): ativo, conta, data, quantidade, preço unitário, taxa
 - Registro de venda (Sell): seleciona lotes disponíveis via FIFO
+- Registro de dividendos (Dividend): valor recebido sem movimentação de lotes
 - Histórico completo de transações com filtros
 
 ### 4.8 Engine FIFO
@@ -79,7 +81,12 @@ Investidor pessoa física que:
 ### 4.9 Import CSV
 - Upload de CSV com mapeamento de colunas
 - Importação em lote de histórico de qualquer corretora
-- Detecção de duplicatas por data + ticker + quantidade + tipo
+- Suporte a tipos: BUY, SELL e DIVIDEND
+- Detecção de duplicatas em duas camadas:
+  - **Preview (client-side):** linhas duplicadas são marcadas em amarelo antes de importar
+  - **Servidor (safety net):** duplicatas são ignoradas antes do INSERT mesmo sem filtro client-side
+- Critério de duplicata: ticker + data + tipo + quantidade (±0.01%) + preço (±0.01%)
+- Toast de confirmação mostra quantas transações foram importadas e quantas duplicatas foram ignoradas
 
 ### 4.10 Relatórios
 - Relatório de ganhos realizados com custo de base, preço de venda, ganho/perda
@@ -93,7 +100,9 @@ Investidor pessoa física que:
 
 ### 4.12 Atualização Automática de Preços
 - Cron job diário configurado no Vercel: `0 21 * * 1-5` (21h UTC = 4pm ET)
-- Rota: `POST /api/prices/update`
+- Vercel Cron envia requisição `GET /api/prices/update` (autenticado via `CRON_SECRET`)
+- Botão "Refresh Prices" na página de Assets envia `POST /api/prices/update` (autenticado via sessão)
+- Fonte: Yahoo Finance — gratuito, sem chave de API
 - Salva snapshot diário do portfólio para o gráfico histórico
 
 ---
@@ -114,8 +123,7 @@ Investidor pessoa física que:
 | CSV parsing | PapaParse |
 | Validação | Zod + React Hook Form |
 | Deploy | Vercel (hobby plan) |
-| Preços — ações | Alpha Vantage (25 req/dia grátis) |
-| Preços — ações alt | Twelve Data (800 req/dia grátis) |
+| Preços — ações/ETFs | Yahoo Finance via API pública (sem chave) |
 | Preços — crypto | CoinGecko (sem chave) |
 
 ---
@@ -147,6 +155,7 @@ Investidor pessoa física que:
 ### Migrations executadas
 1. `supabase/migrations/001_initial_schema.sql` — cria todas as tabelas e índices
 2. `supabase/migrations/002_rls_policies.sql` — aplica políticas RLS
+3. `supabase/migrations/003_add_dividend_type.sql` — adiciona `'dividend'` ao enum `transaction_type`
 
 ---
 
@@ -213,10 +222,11 @@ investment-tracker/
 | `NEXT_PUBLIC_SUPABASE_URL` | Client e Server | Sim |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | Client e Server | Sim |
 | `SUPABASE_SERVICE_ROLE_KEY` | Apenas Server (API routes) | Sim |
-| `ALPHA_VANTAGE_API_KEY` | Server (prices) | Não (mas recomendado) |
-| `TWELVE_DATA_API_KEY` | Server (prices, alternativa) | Não |
+| `CRON_SECRET` | Server (rota GET /api/prices/update) | Não (mas recomendado) |
 
 > ⚠️ Nunca expor `SUPABASE_SERVICE_ROLE_KEY` no client-side. Usar apenas em rotas de API.
+> 
+> As variáveis `ALPHA_VANTAGE_API_KEY` e `TWELVE_DATA_API_KEY` foram removidas — preços agora são buscados via Yahoo Finance sem chave de API.
 
 ---
 
@@ -224,8 +234,8 @@ investment-tracker/
 
 - **FIFO obrigatório:** Vendas sempre consomem o lote mais antigo primeiro
 - **Classificação de prazo:** Lote mantido < 1 ano = curto prazo; ≥ 1 ano = longo prazo
-- **Preços:** Fallback automático — tenta Alpha Vantage, depois Twelve Data, depois CoinGecko (para crypto)
-- **CSV import:** Duplicatas detectadas por (data, ticker, quantidade, tipo) com tolerância de ±R$0,01
+- **Preços:** Yahoo Finance (`query1.finance.yahoo.com/v8/finance/chart/{ticker}`) — sem chave de API. Dividendos não geram movimentação de lotes.
+- **CSV import:** Duplicatas detectadas em duas camadas — preview client-side (badge amarelo) e safety net server-side antes do INSERT. Critério: ticker + data + tipo + quantidade (±0.01%) + preço unitário (±0.01%).
 - **Multi-tenant:** RLS garante que usuário A nunca veja dados de usuário B
 - **Seed opcional:** brokers e account_types padrão podem ser adicionados via `seed.sql` ou pela UI em Settings
 
@@ -243,8 +253,8 @@ investment-tracker/
 
 ## 11. Limitações Conhecidas (v1.0)
 
-- Cron job de preços requer plano Pro do Vercel (no plano Hobby, usar atualização manual)
-- Alpha Vantage gratuito: 25 requisições/dia (pode não cobrir portfólios grandes)
+- Cron job de preços requer plano Pro do Vercel (no plano Hobby, usar o botão "Refresh Prices" na página de Assets)
+- Yahoo Finance é uma API pública não oficial — pode ter limitações de rate ou mudar sem aviso
 - Sem suporte a frações de ações (fractional shares) abaixo de 0.0001
 - Relatórios fiscais são estimativas — não substituem orientação de contador
 - Sem suporte a múltiplas moedas (apenas USD)
@@ -255,8 +265,56 @@ investment-tracker/
 
 - [ ] Notificações por e-mail de variação de preço
 - [ ] Suporte a múltiplas moedas (BRL, EUR)
-- [ ] Dividendos e rendimentos
+- [x] ~~Dividendos e rendimentos~~ — **implementado** (tipo DIVIDEND no CSV import e transações)
 - [ ] Integração direta com APIs de corretoras (Open Finance)
 - [ ] App mobile (React Native ou PWA)
 - [ ] Compartilhamento de portfólio (link público somente leitura)
 - [ ] Benchmarking contra índices (S&P 500, IBOV)
+
+---
+
+## 13. Histórico de Implementação
+
+### Sessão de deploy inicial — 2026-05-06
+
+**Objetivo:** Construir e publicar o app do zero.
+
+Etapas:
+- Criação de todo o código-base (Next.js 14 + Supabase + shadcn/ui)
+- Configuração do projeto no GitHub (`Bindinsurance/investment-tracker`)
+- Execução das migrations no Supabase via SQL Editor
+- Deploy no Vercel com variáveis de ambiente
+- Correção de 4 erros de build TypeScript (ver README → Known Issues, Fixes 1–4)
+- Configuração das URLs de redirect no Supabase Auth via Management API
+
+### Sessão de correções pós-deploy — 2026-05-06
+
+**Problema 1 — Preços não apareciam (mostravam "—"):**
+- Diagnóstico: PostgREST embedded join `select('*, price_cache(*)')` falhava silenciosamente com RLS
+- Solução: Duas queries separadas + priceMap manual + `force-dynamic` em `assets/page.tsx`
+
+**Problema 2 — "Application error" ao abrir a página de import CSV:**
+- Diagnóstico: `<SelectItem value="">` viola a API do Radix UI (string vazia reservada)
+- Solução: Mudança para `value="__skip__"` com conversão no `onValueChange`
+
+**Problema 3 — Dashboard crashava após operações de dados:**
+- Diagnóstico: `buildPortfolioPositions()` acessava `account.broker?.name` sem checar se `account` era null
+- Solução: Guard `if (!asset || !account) continue` no loop de agrupamento
+
+**Problema 4 — Cron job nunca atualizava preços:**
+- Diagnóstico: Vercel Cron envia `GET`; a rota só tinha handler `POST`
+- Solução: Adicionado handler `GET` com validação via `CRON_SECRET`
+
+**Problema 5 — Ativos criados via CSV não recebiam preços:**
+- Diagnóstico: CSV import criava assets com `price_source: 'alphavantage'` (sem chave)
+- Solução: Corrigido para `price_source: 'manual'` (Yahoo Finance, sem chave)
+
+### Funcionalidades adicionadas — 2026-05-06
+
+- **Yahoo Finance como provedor padrão:** Substituiu Alpha Vantage. Sem chave de API. Endpoint: `query1.finance.yahoo.com/v8/finance/chart/{ticker}`
+- **Botão "Refresh Prices":** Adicionado em `assets/assets-client.tsx`; mostra spinner e recarrega a página após atualização
+- **Tipo DIVIDEND no import CSV:** Suporte a linhas de dividendo (quantity=0, price=0, apenas total_amount); não gera movimentação de lotes FIFO
+- **Detecção de duplicatas no import CSV:**
+  - Client-side: preview marca linhas duplicadas em amarelo com badge de contagem
+  - Server-side: safety net antes do INSERT — duplicatas retornam como `duplicates` na resposta
+  - Toast de conclusão informa quantas foram importadas e quantas ignoradas
