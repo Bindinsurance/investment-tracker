@@ -484,6 +484,11 @@ Applied directly to the Supabase database via Management API on 2026-05-06. The 
 | 2026-05-06 | Dividend transaction type (migration 003) | `supabase/migrations/003_add_dividend_type.sql`, `api/import/csv/route.ts`, `import-client.tsx` |
 | 2026-05-06 | "Refresh Prices" button on Assets page | `assets/assets-client.tsx` |
 | 2026-05-06 | Duplicate detection in CSV import (preview + server) | `import/import-client.tsx`, `import/page.tsx`, `api/import/csv/route.ts` |
+| 2026-05-07 | REINVESTMENT → buy, FEE CHARGED → fee type (migration 004) | `api/import/csv/route.ts`, `supabase/migrations/004_add_fee_type.sql` |
+| 2026-05-07 | Edit transaction modal | `transactions/transactions-client.tsx` |
+| 2026-05-07 | Dividend filter + total bar on Transactions page | `transactions/transactions-client.tsx` |
+| 2026-05-07 | TypeScript fix — Supabase join array normalization in import/page.tsx | `app/(dashboard)/import/page.tsx` |
+| 2026-05-07 | Realized P&L changed from YTD to All-time on Dashboard | `dashboard/page.tsx`, `dashboard/dashboard-client.tsx` |
 
 ---
 

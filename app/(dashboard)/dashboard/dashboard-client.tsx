@@ -194,9 +194,9 @@ export function DashboardClient({ summary, snapshots }: Props) {
           trend={unrealizedTrend}
         />
         <StatCard
-          title="Realized P&L (YTD)"
+          title="Realized P&L (All-time)"
           value={formatCurrency(summary.realized_gain_loss_ytd)}
-          subtitle={`${new Date().getFullYear()} total`}
+          subtitle="Historical total"
           icon={realizedTrend === 'up' ? TrendingUp : TrendingDown}
           trend={realizedTrend}
         />

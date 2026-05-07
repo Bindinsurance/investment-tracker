@@ -8,9 +8,6 @@ export default async function DashboardPage() {
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) return null;
 
-  const now = new Date();
-  const yearStart = `${now.getFullYear()}-01-01`;
-
   // Fetch tax lots with relations
   const { data: taxLots } = await supabase
     .from('tax_lots')
@@ -30,14 +27,13 @@ export default async function DashboardPage() {
   // Build price map
   const priceMap = new Map((priceCache ?? []).map((p) => [p.asset_id, p]));
 
-  // Fetch realized gains YTD
-  const { data: realizedYtd } = await supabase
+  // Fetch all-time realized gains (no date filter)
+  const { data: realizedAll } = await supabase
     .from('realized_gains')
     .select('gain_loss')
-    .eq('user_id', user.id)
-    .gte('sale_date', yearStart);
+    .eq('user_id', user.id);
 
-  const realizedGainLossYtd = (realizedYtd ?? []).reduce((sum, r) => sum + r.gain_loss, 0);
+  const realizedGainLossYtd = (realizedAll ?? []).reduce((sum, r) => sum + r.gain_loss, 0);
 
   // Build portfolio
   const inputs = (taxLots ?? []).map((lot: any) => ({
