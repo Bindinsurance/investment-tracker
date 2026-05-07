@@ -13,10 +13,19 @@ export default async function ImportPage() {
     supabase.from('transactions').select('transaction_date, transaction_type, quantity, unit_price, asset:assets(ticker)').eq('user_id', user.id),
   ]);
 
+  // Supabase returns joined asset as array — normalize to single object | null
+  const existingTxns = (transactions ?? []).map((t) => ({
+    transaction_date: t.transaction_date,
+    transaction_type: t.transaction_type,
+    quantity: t.quantity,
+    unit_price: t.unit_price,
+    asset: Array.isArray(t.asset) ? (t.asset[0] ?? null) : (t.asset as { ticker: string } | null),
+  }));
+
   return (
     <div className="h-full flex flex-col">
       <Header title="Import CSV" subtitle="Import transactions from broker CSV files" />
-      <ImportClient accounts={accounts ?? []} existingAssets={assets ?? []} existingTransactions={transactions ?? []} />
+      <ImportClient accounts={accounts ?? []} existingAssets={assets ?? []} existingTransactions={existingTxns} />
     </div>
   );
 }
