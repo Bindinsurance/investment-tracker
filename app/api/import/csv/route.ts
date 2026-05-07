@@ -7,7 +7,7 @@ import { z } from 'zod';
 const importSchema = z.object({
   rows: z.array(z.object({
     transaction_date: z.string(),
-    transaction_type: z.enum(['buy', 'sell', 'dividend']),
+    transaction_type: z.enum(['buy', 'sell', 'dividend', 'fee']),
     ticker: z.string(),
     quantity: z.number().min(0),
     unit_price: z.number().min(0),
@@ -69,48 +69,58 @@ export async function POST(req: NextRequest) {
     const existingTxList = existingTxs ?? [];
 
     for (const row of rows) {
-      // Find or create asset
-      let assetId: string;
-      const { data: existingAsset } = await supabase
-        .from('assets')
-        .select('id')
-        .eq('user_id', user.id)
-        .eq('ticker', row.ticker)
-        .single();
+      const isDividend = row.transaction_type === 'dividend';
+      const isFee = row.transaction_type === 'fee';
 
-      if (existingAsset) {
-        assetId = existingAsset.id;
-      } else {
-        const { data: newAsset, error: assetError } = await supabase
+      // Find or create asset (fees may not have a ticker — use a placeholder)
+      let assetId: string | null = null;
+
+      if (row.ticker) {
+        const { data: existingAsset } = await supabase
           .from('assets')
-          .insert({
-            user_id: user.id,
-            ticker: row.ticker,
-            asset_type: 'stock', // Default; user can change later
-            price_source: 'manual', // Yahoo Finance (free, no API key needed)
-          })
-          .select()
+          .select('id')
+          .eq('user_id', user.id)
+          .eq('ticker', row.ticker)
           .single();
-        if (assetError) { skipped++; continue; }
-        assetId = newAsset.id;
+
+        if (existingAsset) {
+          assetId = existingAsset.id;
+        } else {
+          const { data: newAsset, error: assetError } = await supabase
+            .from('assets')
+            .insert({
+              user_id: user.id,
+              ticker: row.ticker,
+              asset_type: 'stock', // Default; user can change later
+              price_source: 'manual', // Yahoo Finance (free, no API key needed)
+            })
+            .select()
+            .single();
+          if (assetError) { skipped++; continue; }
+          assetId = newAsset.id;
+        }
       }
 
-      const isDividend = row.transaction_type === 'dividend';
+      // For fees without a ticker, we still need an asset_id (use null if schema allows, or skip)
+      // Fees with no ticker are recorded without an asset association
       const totalAmount = row.total_amount || row.quantity * row.unit_price;
-      const quantity = isDividend ? 0 : (row.quantity || calculateQuantityFromAmount(totalAmount, row.unit_price, row.fee));
+      const quantity = (isDividend || isFee) ? 0 : (row.quantity || calculateQuantityFromAmount(totalAmount, row.unit_price, row.fee));
 
-      if (!isDividend && quantity <= 0) { skipped++; continue; }
+      if (!isDividend && !isFee && quantity <= 0) { skipped++; continue; }
+      if ((isDividend || isFee) && totalAmount <= 0) { skipped++; continue; }
 
       // Server-side duplicate check (safety net in case client didn't filter)
-      const isDuplicate = existingTxList.some((t) => {
-        if (t.asset_id !== assetId) return false;
-        if (t.transaction_date !== row.transaction_date) return false;
-        if (t.transaction_type !== row.transaction_type) return false;
-        const qtyMatch = Math.abs(t.quantity - quantity) < Math.max(0.0001, quantity * 0.0001);
-        const priceMatch = isDividend || Math.abs(t.unit_price - row.unit_price) < Math.max(0.01, row.unit_price * 0.0001);
-        return qtyMatch && priceMatch;
-      });
-      if (isDuplicate) { duplicates++; continue; }
+      if (assetId) {
+        const isDuplicate = existingTxList.some((t) => {
+          if (t.asset_id !== assetId) return false;
+          if (t.transaction_date !== row.transaction_date) return false;
+          if (t.transaction_type !== row.transaction_type) return false;
+          const qtyMatch = Math.abs(t.quantity - quantity) < Math.max(0.0001, quantity * 0.0001);
+          const priceMatch = (isDividend || isFee) || Math.abs(t.unit_price - row.unit_price) < Math.max(0.01, row.unit_price * 0.0001);
+          return qtyMatch && priceMatch;
+        });
+        if (isDuplicate) { duplicates++; continue; }
+      }
 
       // Insert transaction
       const { data: tx, error: txError } = await supabase
@@ -121,8 +131,8 @@ export async function POST(req: NextRequest) {
           asset_id: assetId,
           transaction_type: row.transaction_type,
           transaction_date: row.transaction_date,
-          total_amount: isDividend ? totalAmount : (totalAmount || quantity * row.unit_price),
-          unit_price: isDividend ? 0 : row.unit_price,
+          total_amount: totalAmount,
+          unit_price: (isDividend || isFee) ? 0 : row.unit_price,
           quantity,
           fee: row.fee,
           notes: row.notes || null,
@@ -133,8 +143,8 @@ export async function POST(req: NextRequest) {
 
       if (txError) { skipped++; continue; }
 
-      // Dividends: no tax lot or FIFO needed
-      if (isDividend) { imported++; continue; }
+      // Dividends and fees: no tax lot or FIFO needed
+      if (isDividend || isFee) { imported++; continue; }
 
       // For BUY: create tax lot
       if (row.transaction_type === 'buy') {

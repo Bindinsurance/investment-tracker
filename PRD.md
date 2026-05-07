@@ -70,7 +70,10 @@ Investidor pessoa física que:
 - Registro de compra (Buy): ativo, conta, data, quantidade, preço unitário, taxa
 - Registro de venda (Sell): seleciona lotes disponíveis via FIFO
 - Registro de dividendos (Dividend): valor recebido sem movimentação de lotes
-- Histórico completo de transações com filtros
+- Registro de taxas (Fee): taxas cobradas pela corretora, dedutíveis no IR
+- Edição de transação: botão de lápis abre modal com campos editáveis (data, qty, preço, total, fee, notas)
+- Histórico completo com filtros: tipo, conta, período (data início/fim)
+- Barra de total: soma dos valores filtrados exibida ao aplicar qualquer filtro
 
 ### 4.8 Engine FIFO
 - Cada compra cria um tax lot
@@ -81,7 +84,9 @@ Investidor pessoa física que:
 ### 4.9 Import CSV
 - Upload de CSV com mapeamento de colunas
 - Importação em lote de histórico de qualquer corretora
-- Suporte a tipos: BUY, SELL e DIVIDEND
+- Suporte a tipos: BUY, SELL, DIVIDEND, FEE e REINVESTMENT
+  - REINVESTMENT (Fidelity DRIP) → mapeado como BUY
+  - FEE CHARGED → mapeado como FEE (taxa dedutível no imposto)
 - Detecção de duplicatas em duas camadas:
   - **Preview (client-side):** linhas duplicadas são marcadas em amarelo antes de importar
   - **Servidor (safety net):** duplicatas são ignoradas antes do INSERT mesmo sem filtro client-side
@@ -156,6 +161,7 @@ Investidor pessoa física que:
 1. `supabase/migrations/001_initial_schema.sql` — cria todas as tabelas e índices
 2. `supabase/migrations/002_rls_policies.sql` — aplica políticas RLS
 3. `supabase/migrations/003_add_dividend_type.sql` — adiciona `'dividend'` ao enum `transaction_type`
+4. `supabase/migrations/004_add_fee_type.sql` — adiciona `'fee'` ao enum `transaction_type`
 
 ---
 

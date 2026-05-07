@@ -42,11 +42,17 @@ function parseDate(raw: string): string {
   return raw;
 }
 
-function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | null {
-  const lower = raw.toLowerCase();
-  if (lower.includes('dividend') || lower.includes('div reinv') || lower.includes('qualified div')) return 'dividend';
-  if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought')) return 'buy';
-  if (lower.includes('sell') || lower.includes('sold')) return 'sell';
+function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
+  const lower = raw.toLowerCase().trim();
+  // FEE: must check before dividend/buy to avoid misclassifying "fee charged" as something else
+  if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') || lower.includes('account fee') || lower.includes('margin interest')) return 'fee';
+  // DIVIDEND: includes reinvested dividends that come as a separate DIVIDEND RECEIVED line
+  if ((lower.includes('dividend') && !lower.includes('reinvestment') && !lower.includes('reinvest')) ||
+      lower.includes('div reinv') || lower.includes('qualified div') || lower.includes('capital gain')) return 'dividend';
+  // REINVESTMENT = dividend automatically reinvested as a buy (DRIP)
+  if (lower.includes('reinvestment') || lower.includes('reinvest')) return 'buy';
+  if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought') || lower.includes('you bought')) return 'buy';
+  if (lower.includes('sell') || lower.includes('sold') || lower.includes('you sold')) return 'sell';
   return null;
 }
 
@@ -136,10 +142,12 @@ export function ImportClient({ accounts, existingAssets, existingTransactions }:
         const totalAmount = amount || quantity * price;
         const actualQty = quantity || (price > 0 ? totalAmount / price : 0);
         const isDividend = action === 'dividend';
-        const error = !date ? 'Invalid date' : !action ? 'Unknown action' : !ticker ? 'No ticker'
-          : (!isDividend && actualQty <= 0) ? 'Invalid qty'
-          : (!isDividend && price <= 0) ? 'Invalid price'
-          : (isDividend && totalAmount <= 0) ? 'Invalid dividend amount'
+        const isFee = action === 'fee';
+        const error = !date ? 'Invalid date' : !action ? 'Unknown action'
+          : (!ticker && !isFee) ? 'No ticker'
+          : (!isDividend && !isFee && actualQty <= 0) ? 'Invalid qty'
+          : (!isDividend && !isFee && price <= 0) ? 'Invalid price'
+          : ((isDividend || isFee) && totalAmount <= 0) ? (isFee ? 'Invalid fee amount' : 'Invalid dividend amount')
           : undefined;
 
         // Check for duplicates against existing transactions (tolerance 0.01%)
@@ -346,7 +354,12 @@ export function ImportClient({ accounts, existingAssets, existingTransactions }:
                         : <Badge variant="secondary" className="text-xs text-emerald-600">OK</Badge>}
                     </TableCell>
                     <TableCell className="text-xs">{r.transaction_date}</TableCell>
-                    <TableCell><Badge variant={r.transaction_type === 'buy' ? 'default' : 'secondary'} className="text-xs">{r.transaction_type.toUpperCase()}</Badge></TableCell>
+                    <TableCell><Badge variant="secondary" className={cn('text-xs',
+                      r.transaction_type === 'buy' ? 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200' :
+                      r.transaction_type === 'sell' ? 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200' :
+                      r.transaction_type === 'dividend' ? 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200' :
+                      r.transaction_type === 'fee' ? 'bg-orange-100 text-orange-800 dark:bg-orange-900 dark:text-orange-200' : ''
+                    )}>{r.transaction_type.toUpperCase()}</Badge></TableCell>
                     <TableCell className="font-mono text-xs font-semibold">{r.ticker}</TableCell>
                     <TableCell className="text-xs text-right font-mono">{r.quantity.toFixed(4)}</TableCell>
                     <TableCell className="text-xs text-right font-mono">{formatCurrency(r.unit_price)}</TableCell>

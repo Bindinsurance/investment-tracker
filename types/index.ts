@@ -3,7 +3,7 @@
 // ============================================================
 
 export type AssetType = 'stock' | 'etf' | 'crypto';
-export type TransactionType = 'buy' | 'sell' | 'dividend';
+export type TransactionType = 'buy' | 'sell' | 'dividend' | 'fee';
 export type TaxTreatment = 'taxable' | 'tax_advantaged';
 export type TermType = 'short_term' | 'long_term';
 export type PriceSource = 'alphavantage' | 'twelvedata' | 'coingecko' | 'manual';
@@ -255,7 +255,7 @@ export interface CsvColumnMapping {
 
 export interface ParsedTransaction {
   transaction_date: string;
-  transaction_type: TransactionType;
+  transaction_type: TransactionType | 'fee';
   ticker: string;
   quantity: number;
   unit_price: number;

@@ -31,6 +31,8 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
   const [open, setOpen] = useState(false);
   const [editing, setEditing] = useState<Asset | null>(null);
   const [deleting, setDeleting] = useState<Asset | null>(null);
+  const [mergeTarget, setMergeTarget] = useState<{ source: Asset; target: Asset } | null>(null);
+  const [merging, setMerging] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const { toast } = useToast();
 
@@ -84,22 +86,52 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
 
   const onSubmit = async (values: AssetFormValues) => {
     const supabase = createClient();
-    // Auto-assign price source if not set
     const price_source = values.price_source ?? (values.asset_type === 'crypto' ? 'coingecko' : 'manual');
+    const newTicker = values.ticker.toUpperCase().trim();
 
     if (editing) {
-      const { error } = await supabase.from('assets').update({ ...values, price_source }).eq('id', editing.id);
+      // Check if the new ticker conflicts with an existing asset (different id)
+      const conflict = assets.find((a) => a.ticker.toUpperCase() === newTicker && a.id !== editing.id);
+      if (conflict) {
+        // Offer to merge instead of showing a cryptic DB error
+        setMergeTarget({ source: editing, target: conflict });
+        setOpen(false);
+        return;
+      }
+      const { error } = await supabase.from('assets').update({ ...values, ticker: newTicker, price_source }).eq('id', editing.id);
       if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
-      setAssets(assets.map((a) => a.id === editing.id ? { ...a, ...values, price_source } : a));
+      setAssets(assets.map((a) => a.id === editing.id ? { ...a, ...values, ticker: newTicker, price_source } : a));
       toast({ title: 'Asset updated' });
     } else {
       const { data: { user } } = await supabase.auth.getUser();
-      const { data, error } = await supabase.from('assets').insert({ user_id: user!.id, ...values, price_source }).select().single();
+      const { data, error } = await supabase.from('assets').insert({ user_id: user!.id, ...values, ticker: newTicker, price_source }).select().single();
       if (error) { toast({ title: 'Error', description: error.message, variant: 'destructive' }); return; }
       setAssets([...assets, data].sort((a, b) => a.ticker.localeCompare(b.ticker)));
       toast({ title: 'Asset created' });
     }
     setOpen(false);
+  };
+
+  const onMerge = async () => {
+    if (!mergeTarget) return;
+    setMerging(true);
+    try {
+      const res = await fetch('/api/assets/merge', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ source_asset_id: mergeTarget.source.id, target_asset_id: mergeTarget.target.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) { toast({ title: 'Merge failed', description: data.error, variant: 'destructive' }); return; }
+      // Remove source asset from list
+      setAssets(assets.filter((a) => a.id !== mergeTarget.source.id));
+      setMergeTarget(null);
+      toast({ title: 'Assets merged', description: `All transactions from ${mergeTarget.source.ticker} moved to ${mergeTarget.target.ticker}.` });
+    } catch {
+      toast({ title: 'Network error', variant: 'destructive' });
+    } finally {
+      setMerging(false);
+    }
   };
 
   const onDelete = async () => {
@@ -249,6 +281,32 @@ export function AssetsClient({ initialAssets }: { initialAssets: Asset[] }) {
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
             <AlertDialogAction onClick={onDelete} className="bg-destructive text-destructive-foreground">Delete</AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      {/* Merge dialog: appears when user renames a ticker to one that already exists */}
+      <AlertDialog open={!!mergeTarget} onOpenChange={(o) => !o && setMergeTarget(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Merge duplicate assets?</AlertDialogTitle>
+            <AlertDialogDescription className="space-y-2">
+              <span className="block">
+                <strong>{mergeTarget?.target.ticker}</strong> already exists. Would you like to merge{' '}
+                <strong>{mergeTarget?.source.ticker}</strong> into it?
+              </span>
+              <span className="block text-sm">
+                All transactions, tax lots and realized gains from <strong>{mergeTarget?.source.ticker}</strong> will be
+                reassigned to <strong>{mergeTarget?.target.ticker}</strong>, and <strong>{mergeTarget?.source.ticker}</strong> will
+                be deleted. This cannot be undone.
+              </span>
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction onClick={onMerge} disabled={merging}>
+              {merging ? 'Merging...' : `Merge into ${mergeTarget?.target.ticker}`}
+            </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
