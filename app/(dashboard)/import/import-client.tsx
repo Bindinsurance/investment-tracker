@@ -44,15 +44,27 @@ function parseDate(raw: string): string {
 
 function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
   const lower = raw.toLowerCase().trim();
-  // FEE: must check before dividend/buy to avoid misclassifying "fee charged" as something else
-  if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') || lower.includes('account fee') || lower.includes('margin interest')) return 'fee';
-  // DIVIDEND: includes reinvested dividends that come as a separate DIVIDEND RECEIVED line
+  // FEE: must check before dividend/buy to avoid misclassifying
+  if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') ||
+      lower.includes('account fee') || lower.includes('margin interest') || lower.includes('expense ratio') ||
+      lower.includes('management fee') || lower === 'fee') return 'fee';
+  // DIVIDEND: includes received/cash dividends and capital gain distributions
   if ((lower.includes('dividend') && !lower.includes('reinvestment') && !lower.includes('reinvest')) ||
-      lower.includes('div reinv') || lower.includes('qualified div') || lower.includes('capital gain')) return 'dividend';
+      lower.includes('div reinv') || lower.includes('qualified div') || lower.includes('capital gain') ||
+      lower.includes('income distribution') || lower.includes('interest earned') ||
+      lower.includes('interest credit') || lower.includes('ordinary dividend')) return 'dividend';
   // REINVESTMENT = dividend automatically reinvested as a buy (DRIP)
   if (lower.includes('reinvestment') || lower.includes('reinvest')) return 'buy';
-  if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought') || lower.includes('you bought')) return 'buy';
-  if (lower.includes('sell') || lower.includes('sold') || lower.includes('you sold')) return 'sell';
+  // BUY variants: standard brokerage + 401K (contribution, exchange in, transfer in, rollover)
+  if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought') ||
+      lower.includes('you bought') || lower.includes('transfer in') || lower.includes('transferred in') ||
+      lower.includes('exchange in') || lower.includes('contribution') || lower.includes('employer match') ||
+      lower.includes('rollover in') || lower.includes('deposit') && lower.includes('securit')) return 'buy';
+  // SELL variants: standard brokerage + 401K (exchange out, transfer out, withdrawal, distribution)
+  if (lower.includes('sell') || lower.includes('sold') || lower.includes('you sold') ||
+      lower.includes('transfer out') || lower.includes('transferred out') ||
+      lower.includes('exchange out') || lower.includes('rollover out') ||
+      lower.includes('withdrawal') || lower.includes('distribution')) return 'sell';
   return null;
 }
 

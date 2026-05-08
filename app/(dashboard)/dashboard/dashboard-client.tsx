@@ -17,7 +17,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { PortfolioSummary } from '@/types';
 import { formatCurrency, formatPercent, formatDate, cn } from '@/lib/utils';
-import { toAllocationItems } from '@/lib/calculations/portfolio';
+import { toAllocationItems, formatQuantity } from '@/lib/calculations/portfolio';
 import { useToast } from '@/hooks/use-toast';
 
 interface Props {
@@ -153,7 +153,7 @@ export function DashboardClient({ summary, snapshots }: Props) {
     value: s.total_value,
   }));
 
-  const topPositions = summary.positions.slice(0, 5);
+  const allPositions = summary.positions;
 
   return (
     <div className="p-6 space-y-6">
@@ -209,86 +209,99 @@ export function DashboardClient({ summary, snapshots }: Props) {
         <AllocationChart title="By Asset Type" data={assetTypeAllocation} />
       </div>
 
-      {/* Portfolio chart + Top positions */}
-      <div className="grid grid-cols-1 lg:grid-cols-5 gap-4">
-        {/* Area chart */}
-        <Card className="lg:col-span-3">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Portfolio Value Over Time</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {chartData.length < 2 ? (
-              <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                Not enough data for chart yet
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={200}>
-                <AreaChart data={chartData}>
-                  <defs>
-                    <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
-                  <XAxis dataKey="date" tick={{ fontSize: 11 }} />
-                  <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
-                  <Tooltip formatter={(v: number) => [formatCurrency(v), 'Value']} />
-                  <Area
-                    type="monotone"
-                    dataKey="value"
-                    stroke="#3b82f6"
-                    strokeWidth={2}
-                    fill="url(#portfolioGrad)"
-                  />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </CardContent>
-        </Card>
+      {/* Portfolio chart — full width */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">Portfolio Value Over Time</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {chartData.length < 2 ? (
+            <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
+              Not enough data for chart yet
+            </div>
+          ) : (
+            <ResponsiveContainer width="100%" height={200}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="portfolioGrad" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.15} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" className="stroke-border" />
+                <XAxis dataKey="date" tick={{ fontSize: 11 }} />
+                <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => `$${(v / 1000).toFixed(0)}k`} />
+                <Tooltip formatter={(v: number) => [formatCurrency(v), 'Value']} />
+                <Area
+                  type="monotone"
+                  dataKey="value"
+                  stroke="#3b82f6"
+                  strokeWidth={2}
+                  fill="url(#portfolioGrad)"
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </CardContent>
+      </Card>
 
-        {/* Top positions */}
-        <Card className="lg:col-span-2">
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Top Positions</CardTitle>
-            <CardDescription>By current value</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {topPositions.length === 0 ? (
-              <div className="flex items-center justify-center h-48 text-muted-foreground text-sm">
-                No positions yet
-              </div>
-            ) : (
-              <div className="space-y-3">
-                {topPositions.map((pos) => (
-                  <div key={`${pos.account.id}-${pos.asset.id}`} className="flex items-center justify-between">
-                    <div className="flex items-center gap-2 min-w-0">
-                      <div className="w-8 h-8 rounded-lg bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
-                        {pos.asset.ticker.slice(0, 3)}
-                      </div>
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium truncate">{pos.asset.ticker}</p>
-                        <p className="text-xs text-muted-foreground truncate">
-                          {pos.account.broker?.name}
-                        </p>
-                      </div>
-                    </div>
-                    <div className="text-right flex-shrink-0">
-                      <p className="text-sm font-medium">{formatCurrency(pos.current_value)}</p>
-                      <p className={cn(
-                        'text-xs font-medium',
-                        pos.unrealized_gain_loss >= 0 ? 'text-profit' : 'text-loss'
-                      )}>
-                        {formatPercent(pos.unrealized_gain_loss_pct)}
-                      </p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )}
-          </CardContent>
-        </Card>
-      </div>
+      {/* All Positions — full width table */}
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-base">All Positions</CardTitle>
+          <CardDescription>{allPositions.length} position{allPositions.length !== 1 ? 's' : ''} · sorted by value</CardDescription>
+        </CardHeader>
+        <CardContent className="p-0">
+          {allPositions.length === 0 ? (
+            <div className="flex items-center justify-center h-32 text-muted-foreground text-sm">
+              No positions yet
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="border-b bg-muted/50">
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Ticker</th>
+                    <th className="text-left px-4 py-2 font-medium text-muted-foreground">Account</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">Qty</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">Avg Cost</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">Price</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">Value</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">P&amp;L</th>
+                    <th className="text-right px-4 py-2 font-medium text-muted-foreground">% Port.</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {allPositions.map((pos) => (
+                    <tr key={`${pos.account.id}-${pos.asset.id}`} className="border-b last:border-0 hover:bg-muted/30 transition-colors">
+                      <td className="px-4 py-2.5">
+                        <div className="flex items-center gap-2">
+                          <div className="w-7 h-7 rounded bg-primary/10 flex items-center justify-center text-xs font-bold text-primary flex-shrink-0">
+                            {pos.asset.ticker.slice(0, 3)}
+                          </div>
+                          <span className="font-medium">{pos.asset.ticker}</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2.5 text-muted-foreground text-xs">{pos.account.nickname}</td>
+                      <td className="px-4 py-2.5 text-right font-mono text-xs">{formatQuantity(pos.quantity)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs">{formatCurrency(pos.avg_cost_basis)}</td>
+                      <td className="px-4 py-2.5 text-right text-xs">{formatCurrency(pos.current_price)}</td>
+                      <td className="px-4 py-2.5 text-right font-medium">{formatCurrency(pos.current_value)}</td>
+                      <td className={cn('px-4 py-2.5 text-right', pos.unrealized_gain_loss >= 0 ? 'text-profit' : 'text-loss')}>
+                        <div className="font-medium">{formatCurrency(pos.unrealized_gain_loss)}</div>
+                        <div className="text-xs">{formatPercent(pos.unrealized_gain_loss_pct)}</div>
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-muted-foreground">
+                        {summary.total_value > 0 ? ((pos.current_value / summary.total_value) * 100).toFixed(1) : '0.0'}%
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }
