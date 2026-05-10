@@ -44,10 +44,15 @@ function parseDate(raw: string): string {
 
 function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
   const lower = raw.toLowerCase().trim();
+  // SKIP: internal cash sweeps — Fidelity money market redemptions (FDRXX/SPAXX)
+  // These are not real investment transactions, just cash movements within the account
+  if (lower.includes('redemption from core account')) return null;
   // FEE: must check before dividend/buy to avoid misclassifying
+  // Fix #2: add foreign tax paid (e.g. Petrobras ADR withholding tax)
   if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') ||
       lower.includes('account fee') || lower.includes('margin interest') || lower.includes('expense ratio') ||
-      lower.includes('management fee') || lower === 'fee') return 'fee';
+      lower.includes('management fee') || lower === 'fee' ||
+      lower.includes('foreign tax paid') || lower.includes('adj foreign tax paid')) return 'fee';
   // DIVIDEND: includes received/cash dividends and capital gain distributions
   if ((lower.includes('dividend') && !lower.includes('reinvestment') && !lower.includes('reinvest')) ||
       lower.includes('div reinv') || lower.includes('qualified div') || lower.includes('capital gain') ||
@@ -60,11 +65,13 @@ function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
       lower.includes('you bought') || lower.includes('transfer in') || lower.includes('transferred in') ||
       lower.includes('exchange in') || lower.includes('contribution') || lower.includes('employer match') ||
       lower.includes('rollover in') || lower.includes('deposit') && lower.includes('securit')) return 'buy';
-  // SELL variants: standard brokerage + 401K (exchange out, transfer out, withdrawal, distribution)
+  // SELL variants: standard brokerage + 401K (exchange out, transfer out, withdrawal)
+  // Fix #3: removed 'distribution' — Fidelity uses "DISTRIBUTION [TICKER] (Shares)" for stock splits
+  // which are NOT sells. Cash distributions are already caught above by the dividend rule.
   if (lower.includes('sell') || lower.includes('sold') || lower.includes('you sold') ||
       lower.includes('transfer out') || lower.includes('transferred out') ||
       lower.includes('exchange out') || lower.includes('rollover out') ||
-      lower.includes('withdrawal') || lower.includes('distribution')) return 'sell';
+      lower.includes('withdrawal')) return 'sell';
   return null;
 }
 
