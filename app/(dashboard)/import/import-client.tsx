@@ -47,6 +47,9 @@ function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
   // SKIP: internal cash sweeps — Fidelity money market redemptions (FDRXX/SPAXX)
   // These are not real investment transactions, just cash movements within the account
   if (lower.includes('redemption from core account')) return null;
+  // SKIP: Vanguard internal cash sweeps (money market fund movements) and IRA conversions
+  if (lower === 'sweep in' || lower === 'sweep out') return null;
+  if (lower.includes('conversion (incoming)') || lower.includes('conversion (outgoing)')) return null;
   // FEE: must check before dividend/buy to avoid misclassifying
   // Fix #2: add foreign tax paid (e.g. Petrobras ADR withholding tax)
   if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') ||
@@ -54,12 +57,19 @@ function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
       lower.includes('management fee') || lower === 'fee' ||
       lower.includes('foreign tax paid') || lower.includes('adj foreign tax paid')) return 'fee';
   // DIVIDEND: includes received/cash dividends and capital gain distributions
+  // Coinbase: 'staking income' and 'reward income' are crypto income treated as dividend
   if ((lower.includes('dividend') && !lower.includes('reinvestment') && !lower.includes('reinvest')) ||
       lower.includes('div reinv') || lower.includes('qualified div') || lower.includes('capital gain') ||
       lower.includes('income distribution') || lower.includes('interest earned') ||
-      lower.includes('interest credit') || lower.includes('ordinary dividend')) return 'dividend';
+      lower.includes('interest credit') || lower.includes('ordinary dividend') ||
+      lower.includes('staking income') || lower.includes('reward income')) return 'dividend';
   // REINVESTMENT = dividend automatically reinvested as a buy (DRIP)
+  // Vanguard: 'Reinvestment' is the share purchase leg of DRIP (paired with a separate Dividend entry)
   if (lower.includes('reinvestment') || lower.includes('reinvest')) return 'buy';
+  // COINBASE: 'Receive' = crypto received (transfer in / aggregate rewards) — treat as buy
+  // 'Convert' = crypto-to-crypto conversion (e.g. ETH→ETH2) — treat as sell
+  if (lower === 'receive') return 'buy';
+  if (lower === 'convert') return 'sell';
   // BUY variants: standard brokerage + 401K (contribution, exchange in, transfer in, rollover)
   if (lower.includes('buy') || lower.includes('purchase') || lower.includes('bought') ||
       lower.includes('you bought') || lower.includes('transfer in') || lower.includes('transferred in') ||
@@ -94,6 +104,26 @@ export function ImportClient({ accounts, existingAssets, existingTransactions }:
       Papa.parse(file, {
         header: true,
         skipEmptyLines: 'greedy',
+        // Strip broker metadata lines that appear before the real CSV header.
+        // Vanguard exports start with 2 non-empty lines ("Custom report created on..."
+        // and a date range disclaimer) before the actual column header row.
+        // Coinbase exports start with "Transactions" + user info before the real header.
+        // Strategy: find the first line that is NOT metadata and has 4+ delimited fields.
+        beforeFirstChunk: (chunk: string) => {
+          const lines = chunk.split('\n');
+          const metadataPhrases = ['report created', 'this report', 'settled from', 'disclaimer', 'transactions\t', 'you can use'];
+          for (let i = 0; i < Math.min(10, lines.length); i++) {
+            const line = lines[i].trim();
+            if (!line) continue; // skip blank lines
+            const lower = line.toLowerCase();
+            const isMetadata = metadataPhrases.some(p => lower.startsWith(p) || lower.includes(p));
+            if (!isMetadata) {
+              const fieldCount = line.split(/\t|,/).length;
+              if (fieldCount >= 4) return lines.slice(i).join('\n'); // real header found
+            }
+          }
+          return chunk; // could not detect metadata, parse as-is
+        },
         complete: (result) => {
           try {
             const headers = (result.meta.fields ?? []).filter(h => h && h.trim() !== '');
@@ -114,13 +144,15 @@ export function ImportClient({ accounts, existingAssets, existingTransactions }:
               const idx = lower.findIndex((h) => terms.some((t) => h.includes(t)));
               return idx >= 0 ? headers[idx] : '';
             };
-            autoMap.date = find(['date', 'trade date', 'settlement']);
-            autoMap.action = find(['action', 'type', 'transaction', 'description']);
+            autoMap.date = find(['trade date', 'run date', 'settlement date', 'timestamp', 'date']);
+            autoMap.action = find(['action', 'transaction type', 'transaction', 'type', 'description']);
             autoMap.symbol = find(['symbol', 'ticker', 'asset', 'cusip']);
-            autoMap.quantity = find(['qty', 'quantity', 'shares', 'units']);
-            autoMap.price = find(['price', 'unit price']);
-            autoMap.amount = find(['amount', 'total', 'value', 'net amount']);
-            autoMap.fee = find(['fee', 'commission', 'cost']);
+            autoMap.quantity = find(['qty', 'quantity transacted', 'quantity', 'shares', 'units']);
+            // Prefer specific price columns over generic 'price' to avoid matching 'Price Currency' (Coinbase)
+            autoMap.price = find(['unit price', 'price at transaction', 'price ($)', 'price per share', 'price']);
+            // Prefer 'total (inclusive' (Coinbase after-fee total) and 'amount' over 'subtotal'
+            autoMap.amount = find(['total (inclusive', 'net amount', 'amount', 'total', 'value']);
+            autoMap.fee = find(['fees and/or spread', 'fee', 'commission', 'cost']);
             setMapping(autoMap);
             setStep('Map Columns');
           } catch (err) {
@@ -149,7 +181,8 @@ export function ImportClient({ accounts, existingAssets, existingTransactions }:
     try {
       const rows: ParsedTransaction[] = csvRows.slice(0, 500).map((row) => {
         const safeStr = (val: unknown) => String(val ?? '').trim();
-        const safeNum = (val: unknown) => parseFloat(safeStr(val).replace(/[$,\s]/g, '')) || 0;
+        // Handles: plain numbers, $1,234.56, -1234.56, (1234.56), ($1,234.56) — Vanguard uses accounting parens for negatives
+        const safeNum = (val: unknown) => parseFloat(safeStr(val).replace(/[$,\s()]/g, '')) || 0;
         const date = parseDate(safeStr(row[mapping.date ?? '']));
         const action = parseAction(safeStr(row[mapping.action ?? '']));
         const ticker = safeStr(row[mapping.symbol ?? '']).toUpperCase();
