@@ -50,6 +50,15 @@ function parseAction(raw: string): 'buy' | 'sell' | 'dividend' | 'fee' | null {
   // SKIP: Vanguard internal cash sweeps (money market fund movements) and IRA conversions
   if (lower === 'sweep in' || lower === 'sweep out') return null;
   if (lower.includes('conversion (incoming)') || lower.includes('conversion (outgoing)')) return null;
+  // SKIP: Coinbase non-investment events
+  // 'Send' = transfer to another wallet (e.g. USDT sent to family member), not a portfolio event
+  // 'Retail Unstaking Transfer' = internal SOL/ADA unstaking pairs, not a buy/sell
+  // 'Retail Eth2 Deprecation' = Coinbase admin migration ETH2→ETH, not a buy/sell
+  // 'Retail Defi Borrow *' = DeFi operations (collateral, debt) — not investment transactions
+  if (lower === 'send') return null;
+  if (lower.includes('retail unstaking transfer')) return null;
+  if (lower.includes('retail eth2 deprecation')) return null;
+  if (lower.includes('retail defi borrow')) return null;
   // FEE: must check before dividend/buy to avoid misclassifying
   // Fix #2: add foreign tax paid (e.g. Petrobras ADR withholding tax)
   if (lower.includes('fee charged') || lower.includes('service fee') || lower.includes('advisory fee') ||

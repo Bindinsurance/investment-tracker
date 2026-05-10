@@ -324,3 +324,49 @@ Etapas:
   - Client-side: preview marca linhas duplicadas em amarelo com badge de contagem
   - Server-side: safety net antes do INSERT — duplicatas retornam como `duplicates` na resposta
   - Toast de conclusão informa quantas foram importadas e quantas ignoradas
+
+### Sessão de análise e correção de import multi-broker — 2026-05-10
+
+**Objetivo:** Analisar todos os extratos CSV de todas as corretoras (mês a mês) antes do reimporte para detectar proativamente tipos de transação desconhecidos que seriam rejeitados.
+
+**Agentes utilizados:** 3 agentes em paralelo — Fidelity (5 contas), Coinbase (2022–2026), Vanguard.
+
+**Fixes aplicados em `import/import-client.tsx`:**
+
+- **Fidelity — REDEMPTION FROM CORE ACCOUNT → null:** Saques internos do money market (FDRXX/SPAXX) ignorados corretamente
+- **Fidelity — FOREIGN TAX PAID / ADJ FOREIGN TAX PAID → fee:** Imposto retido na fonte de dividendos PBR (Roth EDU)
+- **Fidelity — DISTRIBUTION (Shares) → null:** Stock splits ignorados; removido 'distribution' da regra de sell para evitar falso positivo
+- **Vanguard — suporte completo ao CSV "Roth IRA Larissa.csv":**
+  - `beforeFirstChunk` para pular 3 linhas de metadados antes do header real
+  - `safeNum` corrigido para tratar valores negativos em notação contábil `($4,974.00)`
+  - `Sweep in` / `Sweep out` → null (movimentos internos VMFXX)
+  - `Conversion (incoming)` / `Conversion (outgoing)` → null (eventos administrativos IRA)
+  - `Reinvestment` → buy (leg de compra do DRIP)
+  - `Dividend` → dividend (leg de renda do DRIP)
+- **Coinbase — suporte ao formato TSV (2022–2026):**
+  - `beforeFirstChunk` para pular 2 linhas de metadados ("Transactions" + info de usuário)
+  - `Staking Income` / `Reward Income` → dividend
+  - `Receive` (exact match) → buy (cripto recebido/transferido)
+  - `Convert` (exact match) → sell (conversão entre criptos, ex: ETH→ETH2)
+  - `Send` (exact match) → null (transferência para outra carteira, ex: USDT para familiar)
+  - `Retail Unstaking Transfer` → null (pares internos de unstaking SOL/ADA)
+  - `Retail Eth2 Deprecation` → null (migração administrativa ETH2→ETH, jan/2025)
+  - `Retail Defi Borrow *` → null por prefixo (Collateral Deposit, Debt Repay, Debt Deposit, Collateral Supply)
+- **Auto-mapping multi-broker melhorado:**
+  - `date`: prefere 'trade date', 'run date', 'settlement date', 'timestamp' antes de 'date'
+  - `action`: prefere 'action', 'transaction type', 'transaction' antes de 'type'
+  - `quantity`: prefere 'quantity transacted' antes de 'quantity'
+  - `price`: prefere 'unit price', 'price at transaction', 'price ($)' antes de 'price' (evita "Price Currency" da Coinbase)
+  - `amount`: prefere 'total (inclusive' antes de 'total' (pega total com taxas da Coinbase)
+  - `fee`: prefere 'fees and/or spread' antes de 'fee'
+
+**Alerta cripto:** Criptos no Yahoo Finance precisam de sufixo `-USD` (ex: `BTC-USD`). O import cria o asset com ticker sem sufixo — atualização de preços pode falhar para cripto. Ajuste manual necessário na página de Assets após o import.
+
+**Ordem de reimporte recomendada (banco vazio):**
+1. Fidelity Z08525877 (Principal)
+2. Fidelity 243390432 (Roth EDU)
+3. Fidelity 244218673 (HSA)
+4. Fidelity 246551088 (Self EDU)
+5. Fidelity 258189111 (Self LARI)
+6. Vanguard — Roth IRA Larissa.csv
+7. Coinbase — 2022.csv → 2026.csv

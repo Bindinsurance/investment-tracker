@@ -9,7 +9,7 @@ A personal investment portfolio tracker for stocks, ETFs, and cryptocurrencies. 
 - **Portfolio Dashboard** — real-time value, unrealized/realized P&L, allocation charts
 - **Multi-Broker, Multi-Account** — Roth IRA, Brokerage, 401k, and more
 - **Buy, Sell & Dividend Transactions** — FIFO tax-lot engine, short-term vs long-term classification, dividend income tracking
-- **CSV Import** — bulk import from any broker with column mapping; duplicate detection skips already-imported rows automatically
+- **CSV Import** — bulk import from Fidelity, Vanguard, and Coinbase (and any broker) with intelligent column auto-mapping; metadata header stripping for broker-specific formats; duplicate detection skips already-imported rows automatically
 - **Tax Reports** — realized gains with cost basis, holding period, and estimated tax
 - **Price Updates** — Yahoo Finance (free, no API key required); manual "Refresh Prices" button on Assets page; automatic daily cron job
 - **Dark / Light theme**
@@ -489,6 +489,10 @@ Applied directly to the Supabase database via Management API on 2026-05-06. The 
 | 2026-05-07 | Dividend filter + total bar on Transactions page | `transactions/transactions-client.tsx` |
 | 2026-05-07 | TypeScript fix — Supabase join array normalization in import/page.tsx | `app/(dashboard)/import/page.tsx` |
 | 2026-05-07 | Realized P&L changed from YTD to All-time on Dashboard | `dashboard/page.tsx`, `dashboard/dashboard-client.tsx` |
+| 2026-05-10 | Vanguard CSV import support — beforeFirstChunk metadata skip, safeNum parentheses `($4,974.00)`, Sweep in/out + Conversion → null | `import/import-client.tsx` |
+| 2026-05-10 | Coinbase TSV import support — beforeFirstChunk 2-line metadata skip, Staking Income/Reward Income → dividend, Receive → buy, Convert → sell, Send/Retail Unstaking/Eth2 Deprecation/DeFi Borrow → null | `import/import-client.tsx` |
+| 2026-05-10 | Multi-broker auto-mapping — prefer 'trade date'/'timestamp' for date, 'transaction type' for action, 'quantity transacted' for qty, 'unit price'/'price at transaction' for price, 'total (inclusive' for amount, 'fees and/or spread' for fee | `import/import-client.tsx` |
+| 2026-05-10 | Fidelity fixes — REDEMPTION FROM CORE ACCOUNT → null (money market), FOREIGN TAX PAID → fee, DISTRIBUTION (Shares) → null (stock split, not a sell) | `import/import-client.tsx` |
 
 ---
 

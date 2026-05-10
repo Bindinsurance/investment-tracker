@@ -79,14 +79,46 @@ Claude usa computer-use para:
 - Critério: ticker + data + tipo + quantidade (±0.01%) + preço (±0.01%)
 
 ### parseAction — regras e armadilhas conhecidas (import-client.tsx)
-- `REDEMPTION FROM CORE ACCOUNT` (FDRXX/SPAXX) → **null** (skip). São saques internos do money market para financiar compras ou pagar despesas (HSA). NÃO são transações de investimento.
-- `FOREIGN TAX PAID` / `ADJ FOREIGN TAX PAID` → **fee**. Imposto retido na fonte de dividendos de ADRs brasileiros (ex: PBR na Roth EDU).
-- `DISTRIBUTION [TICKER] (Shares)` → **null** (skip). A Fidelity usa esse formato para stock splits (TSLA, GOOG, SHOP). Remover 'distribution' do match de sell era necessário porque "income distribution" já é capturado pela regra de dividend antes.
+
+**Fidelity:**
+- `REDEMPTION FROM CORE ACCOUNT` (FDRXX/SPAXX) → **null** (skip). São saques internos do money market.
+- `FOREIGN TAX PAID` / `ADJ FOREIGN TAX PAID` → **fee**. Imposto retido na fonte de dividendos PBR (Roth EDU).
+- `DISTRIBUTION [TICKER] (Shares)` → **null** (skip). Stock splits da Fidelity. Nunca incluir 'distribution' na regra de sell.
 - `YOU BOUGHT`, `REINVESTMENT`, `PURCHASE INTO CORE ACCOUNT` → **buy**
 - `YOU SOLD`, `SOLD` → **sell**
 - `DIVIDEND RECEIVED` → **dividend**
 - `FEE CHARGED` → **fee**
-- Contas 401K usam: `contribution`, `exchange in/out`, `transfer in/out`, `employer match`, `rollover in/out` — todos mapeados.
+- Contas 401K: `contribution`, `exchange in/out`, `transfer in/out`, `employer match`, `rollover in/out` — todos mapeados.
+
+**Vanguard (CSV: "Roth IRA Larissa.csv"):**
+- Formato CSV com 3 linhas de metadados antes do header real (linha 1: "Custom report created on...", linha 2: disclaimer, linha 3: vazia). O `beforeFirstChunk` do PapaParse detecta e pula essas linhas automaticamente.
+- Coluna de action: `Transaction type` (detectada pelo auto-mapping via 'transaction type').
+- Valores monetários entre parênteses: `($4,974.00)` = negativo → o `safeNum` agora inclui `()` no replace.
+- `Buy` → **buy** | `Dividend` → **dividend** | `Reinvestment` → **buy** (leg de compra do DRIP, a Vanguard emite linha separada de Dividend + Reinvestment)
+- `Sweep in` / `Sweep out` → **null** (movimentos internos do VMFXX money market)
+- `Conversion (incoming)` / `Conversion (outgoing)` → **null** (eventos administrativos IRA, não são investimento)
+- XLSX (`customActivityReport.xlsx`): conteúdo equivalente ao CSV. O app só aceita CSV — usar o CSV direto.
+
+**Coinbase (5 CSVs por ano 2022–2026):**
+- Formato TSV com 2 linhas de metadados antes do header real ("Transactions" + info de usuário). O `beforeFirstChunk` detecta e pula.
+- Coluna de ação: `Transaction Type` | ticker: `Asset` | data: `Timestamp` (ISO 8601 UTC, parseDate trata corretamente).
+- `Buy` → **buy** | `Staking Income` → **dividend** | `Reward Income` → **dividend** | `Receive` → **buy** (exact match — crypto recebido/transferido)
+- `Convert` → **sell** (exact match — conversão entre criptos, ex: ETH→ETH2)
+- `Deposit` → **null** (entrada de fiat USD, nenhum match → null naturalmente)
+- `Withdrawal` → **sell** (compatível com saques 401K da Fidelity; USD/USDC aparecem como ticker inválido na preview)
+- `Send` → **null** (exact match — transferência de cripto para outra carteira, ex: USDT para familiar)
+- `Retail Unstaking Transfer` → **null** (pares internos de unstaking SOL/ADA)
+- `Retail Eth2 Deprecation` → **null** (migração administrativa ETH2→ETH pela Coinbase, jan/2025)
+- `Retail Defi Borrow *` → **null** (prefixo cobre todos os subtipos: Collateral Deposit, Debt Repay, Debt Deposit, Collateral Supply)
+- Criptos no Yahoo Finance precisam de sufixo `-USD` (ex: `BTC-USD`). O import cria o asset com ticker sem sufixo — atualização de preços pode falhar para criptos.
+
+**Auto-mapping melhorado (import-client.tsx):**
+- `date`: prefere 'trade date', 'run date', 'settlement date', 'timestamp' antes de 'date'
+- `action`: prefere 'action', 'transaction type', 'transaction' antes de 'type'
+- `quantity`: prefere 'quantity transacted' antes de 'quantity'
+- `price`: prefere 'unit price', 'price at transaction', 'price ($)' antes de 'price' genérico (evita "Price Currency" da Coinbase)
+- `amount`: prefere 'total (inclusive' antes de 'total' (pega total com taxas da Coinbase, não subtotal)
+- `fee`: prefere 'fees and/or spread' antes de 'fee'
 
 ### Extratos Fidelity por conta (pasta: Downloads/Brokers/)
 - **Z08525877** (Conta Principal / Joint WROS-TOD): VOO, QQQ, NVDA, META, MSFT, AMZN, GOOGL, AAPL, DIS, TSLA, CCL, BA, ABNB, NU, SHOP, PLTR, PBR, SPAXX
