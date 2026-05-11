@@ -12,7 +12,8 @@ export default async function TransactionsPage() {
       .from('transactions')
       .select('*, account:accounts(*, broker:brokers(*), account_type:account_types(*)), asset:assets(*)')
       .eq('user_id', user.id)
-      .order('transaction_date', { ascending: false }),
+      .order('transaction_date', { ascending: false })
+      .limit(5000),
     supabase.from('accounts').select('*, broker:brokers(*), account_type:account_types(*)').eq('user_id', user.id).order('nickname'),
     supabase.from('assets').select('*').eq('user_id', user.id).eq('is_active', true).order('ticker'),
   ]);

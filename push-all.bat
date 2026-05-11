@@ -35,6 +35,10 @@ echo.
 echo  Commit: %MSG%
 echo.
 
+:: Remover flags que podem esconder mudancas
+git update-index --no-skip-worktree "app/(dashboard)/transactions/page.tsx" 2>nul
+git update-index --no-assume-unchanged "app/(dashboard)/transactions/page.tsx" 2>nul
+
 git add .
 
 git diff --cached --quiet
