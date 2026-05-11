@@ -370,3 +370,29 @@ Etapas:
 5. Fidelity 258189111 (Self LARI)
 6. Vanguard — Roth IRA Larissa.csv
 7. Coinbase — 2022.csv → 2026.csv
+
+---
+
+### Sessão de importação completa — 2026-05-11
+
+**Objetivo:** Importar todos os CSVs históricos de todas as corretoras via API direta ao Supabase (JavaScript no browser), sem depender da rota `/api/import/csv`.
+
+**Método:** Função `window.__cbImport()` para Coinbase; queries REST diretas para Fidelity e Vanguard. Deduplicação por date+assetId+type+quantity(9 decimais).
+
+**Resultados Coinbase (conta 353bfe9c — Coinbase):**
+
+| Arquivo | Inseridas | Duplicatas |
+|---|---|---|
+| 2026.csv | 57 | 0 |
+| 2025.csv | 179 | 0 |
+| 2024.csv | 169 | 0 |
+| 2023.csv | 173 | 0 |
+| 2022.csv | 154 | 0 |
+| **Total Coinbase** | **732** | **0** |
+
+**Status completo pós-sessão:**
+- ✅ Fidelity — 5 contas importadas (sessão anterior)
+- ✅ Vanguard — Roth IRA Larissa.csv importado (sessão anterior)
+- ✅ Coinbase — 5 anos (2022–2026), 732 transações, 0 duplicatas
+
+**Banco de dados:** Portfólio histórico completo disponível no Investment Tracker a partir de 11/05/2026.

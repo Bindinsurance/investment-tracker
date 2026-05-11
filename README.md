@@ -493,6 +493,7 @@ Applied directly to the Supabase database via Management API on 2026-05-06. The 
 | 2026-05-10 | Coinbase TSV import support — beforeFirstChunk 2-line metadata skip, Staking Income/Reward Income → dividend, Receive → buy, Convert → sell, Send/Retail Unstaking/Eth2 Deprecation/DeFi Borrow → null | `import/import-client.tsx` |
 | 2026-05-10 | Multi-broker auto-mapping — prefer 'trade date'/'timestamp' for date, 'transaction type' for action, 'quantity transacted' for qty, 'unit price'/'price at transaction' for price, 'total (inclusive' for amount, 'fees and/or spread' for fee | `import/import-client.tsx` |
 | 2026-05-10 | Fidelity fixes — REDEMPTION FROM CORE ACCOUNT → null (money market), FOREIGN TAX PAID → fee, DISTRIBUTION (Shares) → null (stock split, not a sell) | `import/import-client.tsx` |
+| 2026-05-11 | **Full historical data import** — all broker CSVs imported via direct Supabase API. Fidelity (5 accounts), Vanguard Roth IRA Larissa, Coinbase 2022–2026 (732 crypto transactions, 0 duplicates). | Database only (no code change) |
 
 ---
 
